@@ -42,7 +42,7 @@ def generate_demo_job(number: int, rng=None) -> dict:
         "workMode": rng.choice(("Remote", "Hybrid", "Office-based")),
         "employmentType": rng.choice(("Full-time", "Fixed-term")),
         "salary": f"INR {low + rng.randint(0, 2)}–{high + rng.randint(0, 3)} lakh/year",
-        "description": f"This generated {role.lower()} profile at {company} covers work on {project}. It is generated content and is not a live vacancy.",
+        "description": f"{role} at {company}, focused on {project}.",
         "responsibilities": rng.sample(list(tasks), len(tasks)), "skills": list(skills),
         "qualification": "Relevant training, a degree, or equivalent practical experience.",
         "benefits": rng.sample(("Learning allowance", "Mentoring sessions", "Flexible scheduling", "Equipment support", "Professional-development time"), 3),
@@ -51,10 +51,8 @@ def generate_demo_job(number: int, rng=None) -> dict:
 
 
 def demo_title(job: dict) -> str:
-    return f"Generated role: {job['title']} · {job['company']}"
+    return f"{job['title']} · {job['company']}"
 
 
 def demo_description(job: dict, source_title: str | None) -> str:
-    return (f"Generated {job['role']} profile; not a live vacancy. Applications are disabled. "
-            f"Separately submitted source: {(source_title or 'Untitled resource')[:120]}. "
-            "The source is not an official document for this role.")
+    return f"{job['role']} at {job['company']}."

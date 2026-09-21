@@ -28,8 +28,9 @@ def render_rss(pages: list[dict], settings, limit: int | None = None) -> str:
     now = _pubdate(None)
     items = []
     for p in pages:
-        link = p.get("page_url") or f"{base}/pdf/{p.get('slug')}"
-        guid = p.get("page_url") or link
+        # Keep every feed entry canonical when the public domain changes.
+        link = f"{base.rstrip('/')}/pdf/{p.get('slug')}"
+        guid = link
         items.append(
             "  <item>\n"
             f"    <title>{escape(p.get('title') or 'PDF page')}</title>\n"

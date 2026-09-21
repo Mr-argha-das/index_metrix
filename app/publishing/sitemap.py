@@ -21,7 +21,9 @@ def render_sitemap(pages: list[dict], base_url: str, chunk: int = 1) -> str:
     """Render one sitemap (chunk) from a list of page rows."""
     urls = []
     for p in pages:
-        page_url = p.get("page_url") or f"{base_url}/pdf/{p.get('slug')}"
+        # A page URL is derived from the currently configured public origin.
+        # Do not reuse a historical stored hostname after a domain migration.
+        page_url = f"{base_url.rstrip('/')}/pdf/{p.get('slug')}"
         lastmod = p.get("updated_at") or p.get("published_at")
         urls.append(_url_entry(page_url, lastmod))
     return (

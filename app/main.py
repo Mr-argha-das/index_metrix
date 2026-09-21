@@ -41,6 +41,7 @@ from .integrations.bing_webmaster import BingConfigError, BingWebmaster
 from .integrations.google_search_console import GSCConfigError, GoogleSearchConsole
 from .logging_setup import RingLogHandler, setup_logging
 from .pdf.fetcher import HostRateLimiter, SafeFetcher
+from .publishing.pages import rebase_page_urls
 from .queue.manager import QueueManager
 from .users.service import UserService
 from .utils import secure_cookie_params, utcnow, utcnow_iso
@@ -106,6 +107,7 @@ async def lifespan(app: FastAPI):
 
     # -- bootstrap + housekeeping --------------------------------------------
     await bootstrap_admin_if_needed(repos, settings)
+    await rebase_page_urls(repos, settings.public_base_url)
     await auth.purge_expired()
     await queue.start()
 

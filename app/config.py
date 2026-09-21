@@ -30,7 +30,9 @@ class Settings(BaseSettings):
     # -- application ------------------------------------------------------
     app_name: str = "BOT INDEXER"
     app_env: str = "development"  # development | production | test
-    public_base_url: str = "http://localhost:8000"
+    # Canonical public origin for generated pages, sitemap, RSS and robots.txt.
+    # Local development can override this through PUBLIC_BASE_URL in .env.
+    public_base_url: str = "https://v1.indexmetrix.com"
     version: str = VERSION
 
     # -- auth -------------------------------------------------------------
@@ -93,7 +95,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _normalize(self) -> "Settings":
-        self.public_base_url = (self.public_base_url or "http://localhost:8000").rstrip("/")
+        self.public_base_url = (
+            self.public_base_url or "https://v1.indexmetrix.com"
+        ).rstrip("/")
         self.app_env = (self.app_env or "development").lower()
         if self.app_env == "test":
             # Automated tests spin up a local PDF server; allow loopback there.

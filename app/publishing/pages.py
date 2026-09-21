@@ -17,6 +17,29 @@ log = logging.getLogger("bot_indexer.pages")
 MAX_SLUG_LEN = 72
 
 
+def public_page_url(base_url: str, slug: str) -> str:
+    """Return the current canonical URL for a dedicated page.
+
+    Page URLs are derived data. Recomputing them from the active public origin
+    keeps pages published before a domain move out of the sitemap, RSS and
+    canonical metadata under their former hostname.
+    """
+    return f"{base_url.rstrip('/')}/pdf/{slug}"
+
+
+async def rebase_page_urls(repos: Repos, base_url: str) -> int:
+    """Persist the current canonical origin on previously published pages."""
+    updated = 0
+    for page in await repos.pages.all():
+        desired_url = public_page_url(base_url, page["slug"])
+        if page.get("page_url") != desired_url:
+            await repos.pages.update(page["id"], page_url=desired_url)
+            updated += 1
+    if updated:
+        log.info("Rebased %s published page URL(s) to %s", updated, base_url)
+    return updated
+
+
 def base_slug_for(pdf_title: str | None, url: str) -> str:
     """Stable slug base derived from the PDF title, falling back to the URL
     file name. The unique suffix (hash of the normalized URL) is appended by
@@ -91,7 +114,7 @@ async def create_page_for_pdf(
     page = await repos.pages.insert(
         pdf_id=pdf["id"],
         slug=slug,
-        page_url=f"{base_url}/pdf/{slug}",
+        page_url=public_page_url(base_url, slug),
         title=truncate(title, 200),
         description=description,
         published_at=now,
@@ -130,6 +153,7 @@ def build_pdf_page_context(pdf: dict, page: dict, analysis: AnalysisResult | Non
         except Exception:  # noqa: BLE001
             return str(value)
 
+    canonical_url = public_page_url(settings.public_base_url, page["slug"])
     return {
         "pdf": jsonable(pdf),
         "page": jsonable(page),
@@ -137,8 +161,8 @@ def build_pdf_page_context(pdf: dict, page: dict, analysis: AnalysisResult | Non
         "base_url": settings.public_base_url,
         "title": page.get("title") or "PDF document",
         "description": page.get("description") or "",
-        "page_url": page.get("page_url"),
-        "canonical_url": page.get("page_url"),
+        "page_url": canonical_url,
+        "canonical_url": canonical_url,
         "original_url": pdf.get("original_url"),
         "source_domain": pdf.get("source_domain"),
         "page_count": pdf.get("page_count"),
@@ -170,7 +194,7 @@ def build_pdf_page_context(pdf: dict, page: dict, analysis: AnalysisResult | Non
                 "@type": "WebPage",
                 "name": page.get("title"),
                 "description": page.get("description"),
-                "url": page.get("page_url"),
+                "url": canonical_url,
                 "datePublished": page.get("published_at"),
                 "dateModified": page.get("updated_at"),
                 "about": {

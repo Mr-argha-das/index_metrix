@@ -6,7 +6,7 @@
 
 **FastAPI platform for third-party PDF and HTML resource validation, publishing, discovery and monitoring.**
 
-You submit external PDF or HTML/blog URLs. INDEX MATRIX fetches them safely (SSRF-protected), validates and analyzes the resource, publishes a useful SEO-complete dedicated page **on our own site** (with a clear link to the original file), exposes the pages through the public `/references` library, `sitemap.xml` + `rss.xml` so search engines can discover them, and honestly tracks discovery/crawl/index states — never claiming indexing without authoritative evidence.
+You submit external PDF or normal webpage URLs (homepages, about pages, blogs and articles). INDEX MATRIX fetches them safely (SSRF-protected), validates and analyzes the resource, publishes a useful SEO-complete dedicated page **on our own site** (with a clear link to the original resource), exposes the pages through the public `/references` library, `sitemap.xml` + `rss.xml` so search engines can discover them, and honestly tracks discovery/crawl/index states — never claiming indexing without authoritative evidence.
 
 ---
 
@@ -17,11 +17,23 @@ You submit external PDF or HTML/blog URLs. INDEX MATRIX fetches them safely (SSR
 | **Validation** | http/https only; scheme, host and IP checks; **SSRF protection on every redirect hop** (localhost, private, loopback, link-local, metadata `169.254.169.254`, internal name blocks); DNS-rebinding defence (pinned resolver); max 5 redirects; 10 s connect / 30 s read timeouts; 35 MB cap |
 | **Fetch** | Honest user agent `BOT-INDEXER/1.0` — our fetch is a *technical fetch*, never labelled as a Googlebot crawl |
 | **Analysis** | `%PDF-` magic-byte signature check (HTML masquerading as PDF is rejected), PyMuPDF structure/metadata extraction (title, author, pages, text), SHA-256 fingerprint, TEXT_PDF vs SCANNED_OR_EMPTY_PDF classification; useful HTML title/metadata/text extraction without executing scripts |
-| **Publishing** | One owned page per valid PDF or useful HTML article (new fictional demos at `/jobs/<number>`; legacy references at `/pdf/<slug>`) — metadata, first-page preview excerpt, canonical URL, Open Graph, **valid JSON-LD** (schema.org `WebPage`/`DigitalDocument`), and a plain-HTML original-resource link (`rel="noopener"`, no JS). The file is **not re-hosted** — we never copy the document, we link to it |
+| **Publishing** | One owned page per valid PDF or useful HTML webpage (new fictional demos at `/jobs/<number>`; legacy references at `/pdf/<slug>`) — metadata, first-page preview excerpt, canonical URL, Open Graph, **valid JSON-LD** (schema.org `WebPage`/`DigitalDocument`), and a plain-HTML original-resource link (`rel="noopener"`, no JS). The file is **not re-hosted** — we never copy the document, we link to it |
 | **Discovery** | Public paginated `/references` HTML links; `sitemap.xml` (our pages only, real `lastmod`, never third-party URLs), `rss.xml` (real `pubDate`), `robots.txt` declaring the sitemap |
 | **Queue** | In-process async queue, concurrency ≤ 5, 3 retries with exponential backoff (5 s × 2ⁿ, capped 300 s), crash recovery on restart |
 | **Monitoring** | **Technical Server Probe** (explicitly labelled “NOT evidence of any Google crawl”), Search Console URL Inspection for *authorized properties only*; index status changes **only** with recorded authoritative evidence |
 | **Integrations** | Google Search Console (JWT RS256 service account, **no Indexing API** as a generic submission tool) and Bing Webmaster — both optional; when absent they report `NOT CONFIGURED`, they never fabricate results |
+
+### PDF and normal webpage URLs
+
+Use the same submission form for public HTTP(S) PDF files, homepages, about pages, blogs and articles. Neither `.pdf` nor `.html` is required: `/`, `/about`, `/pages/about.php` and extensionless PDF downloads are supported. PDF and HTML URLs can be mixed in one batch or a `.txt`/`.csv` URL list; normalized-URL deduplication still applies. The existing `/api/pdfs` endpoints and `/api/index/*` contracts are retained for compatibility.
+
+- Actual PDF signatures take precedence, followed by PDF structure validation. HTML pages do **not** require a PDF signature.
+- HTML/XHTML Content-Type is recognized. Missing or generic MIME (`text/plain` or `application/octet-stream`) permits conservative HTML detection from a bounded 4 KiB prefix; explicit JSON/image MIME is not reinterpreted as HTML.
+- Webpages need useful server-rendered text (at least 120 characters) and an extracted title or actual first heading. Extraction is capped at 2 MiB and never executes JavaScript. Details show **Webpage analysis**, source metadata and a text preview, rather than PDF-only fields.
+- Unsupported downloads, HTML returned in place of an expected PDF, thin/JavaScript-only pages, detected login/challenge walls and robots/noindex restrictions do not produce published pages. SSRF, DNS pinning, redirect, TLS and download limits remain enforced. Submitting a URL is not a promise that it can be fetched or published.
+- Validated resources continue through the existing clearly labelled fictional-demo publication flow at `/jobs/<number>`, with a separate **Open Original Web Page** or **View Original PDF** link. Publication is not proof of Google crawling/indexing or of a real job opening.
+
+For previously failed rows, use **URLs → Details → Retry processing** after updating. Re-submitting the same URL deduplicates; it does not retry processing.
 
 ### Honest status model
 
@@ -104,7 +116,7 @@ When unconfigured, every integration surface reports **NOT CONFIGURED** — no f
 .venv/bin/python -m pytest tests/ -v
 ```
 
-The current full suite passes **263 tests** (2026-09-21). See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current verification and [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the historical implementation report.
+The current full suite passes **294 Python tests** (2026-09-22), plus **10 frontend tests**. See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current verification and [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the historical implementation report.
 
 | File | Covers |
 |---|---|
@@ -112,6 +124,7 @@ The current full suite passes **263 tests** (2026-09-21). See [GOOGLE_DISCOVERY.
 | `test_feather.py` | atomic writes, no temp leftovers, persistence across restart, backups/restore, corruption → clear error + file preserved, schema migration with data preserved |
 | `test_auth.py` | login/logout/me, bootstrap idempotency, login brute-force limiting, CSRF enforcement, role-based 403s, own-vs-others data isolation |
 | `test_users.py` | creation validation (email/password/role/duplicates), disable/enable, password reset invalidates sessions, self-protection, last-admin guard |
+| `test_web_urls.py` | Homepage, PHP/blog/redirect URLs, HTML/XHTML/generic MIME, heading fallback, extensionless PDF, mixed batches and all intake methods, unsupported sources, publication and resource-aware UI |
 | `test_pipeline.py` | end-to-end publish + metadata, duplicate detection, same-content flagging, 404/403/fake-HTML/timeout paths, retry endpoint, delete removes page + sitemap entry, user ownership |
 | `test_publishing.py` | sitemap (own pages only, disabled → 404, deletion removes), RSS (`pubDate`, `guid`), robots, public page without auth, stable unique slugs |
 | `test_monitoring.py` | probe honesty labels, probe-never-sets-search-engine-crawl invariant, fake GSC client → INDEXED/NOT_INDEXED with evidence, ambiguous → UNKNOWN, not-configured → UNKNOWN |

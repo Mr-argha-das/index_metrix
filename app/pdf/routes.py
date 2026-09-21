@@ -1,4 +1,4 @@
-"""PDF URL submission, listing, detail, retry, delete, re-analyze."""
+"""PDF and HTML URL submission, listing, detail, retry, delete, re-analyze."""
 from __future__ import annotations
 
 import logging
@@ -316,7 +316,9 @@ async def pdf_detail_page(
     return templates.render(
         request,
         "pdf_detail.html",
-        {"pdf": pdf, "page": page_row[0] if page_row else None, "events": events, "index_evidence": index_ev, "crawl_evidence": crawl_ev},
+        {"pdf": pdf, "page": page_row[0] if page_row else None, "events": events, "index_evidence": index_ev, "crawl_evidence": crawl_ev,
+         "html_metadata": json_loads(pdf.get("html_metadata"), {}) or {},
+         "resource_type": pdf.get("resource_type") or ("HTML" if pdf.get("html_metadata") else "PDF" if pdf.get("classification") in ("TEXT_PDF", "SCANNED_OR_EMPTY_PDF") else "UNKNOWN")},
     )
 
 

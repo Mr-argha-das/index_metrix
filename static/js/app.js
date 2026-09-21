@@ -243,7 +243,7 @@ const App = (() => {
     DISCOVERY_SUBMITTED: ["violet", "Discovery Submitted"],
     // crawl
     UNSUPPORTED: ["slate", "Unsupported — normal discovery"],
-    HTML: ["blue", "HTML article"],
+    HTML: ["blue", "HTML web page"],
     FETCH_CHECKED: ["blue", "Fetch Checked"],
     SEARCH_ENGINE_CRAWL_EVIDENCE: ["violet", "Search-engine crawl evidence"],
     DONE: ["green", "Done"],

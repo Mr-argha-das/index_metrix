@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set title = "Dashboard" %}
-{% set subtitle = "PDF Discovery & Monitoring" %}
+{% set subtitle = "URL Discovery & Monitoring" %}
 {% set nav = "dashboard" %}
 {% block content %}
 <div class="flex-between mb-16 wrap">
@@ -63,9 +63,9 @@
         </div>
         <div class="empty-state" id="recent-empty" style="display:none">
           <div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
-          <h4>No PDF URLs yet</h4>
-          <p>Submit your first PDF URL and watch the full lifecycle play out here — validation, analysis, page publishing and discovery.</p>
-          <a class="btn btn-primary" href="/submit">Submit a PDF URL</a>
+          <h4>No URLs yet</h4>
+          <p>Submit your first PDF or webpage URL and watch the full lifecycle play out here — validation, analysis, page publishing and discovery.</p>
+          <a class="btn btn-primary" href="/submit">Submit a URL</a>
         </div>
       </div>
     </div>
@@ -99,7 +99,7 @@
       <div class="card-head"><div><h3>Evidence policy</h3><div class="sub">how index status is decided</div></div></div>
       <div class="card-body small" style="color:var(--muted)">
         <p style="margin:0 0 8px"><span class="pill green" style="margin-right:6px"><span class="dot"></span>Indexed</span>only with authoritative evidence (e.g. Google Search Console for a property we are authorized to inspect).</p>
-        <p style="margin:0 0 8px"><span class="pill slate" style="margin-right:6px"><span class="dot"></span>Unknown</span>default for everything else — including third-party PDFs, which we never own.</p>
+        <p style="margin:0 0 8px"><span class="pill slate" style="margin-right:6px"><span class="dot"></span>Unknown</span>default for everything else — including third-party resources, which we do not own.</p>
         <p style="margin:0">Our server fetches are <strong>technical probes</strong>, never reported as search-engine crawls.</p>
       </div>
     </div>
@@ -107,5 +107,5 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/dashboard.js?v=nat64-diagnostics-1"></script>
+<script src="/static/js/dashboard.js?v=web-urls-1"></script>
 {% endblock %}

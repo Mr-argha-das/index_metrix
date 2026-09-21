@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% set title = "PDF #" ~ pdf.id %}
+{% set title = "Resource #" ~ pdf.id %}
 {% set subtitle = (pdf.title or pdf.normalized_url) | string | truncate(70) %}
 {% set nav = "urls" %}
 {% block content %}
@@ -8,7 +8,7 @@
     <div class="card">
       <div class="card-head">
         <div>
-          <h3>{{ pdf.title or "Untitled PDF" }}</h3>
+          <h3>{{ pdf.title or "Untitled resource" }}</h3>
           <div class="sub mono">{{ pdf.normalized_url }}</div>
         </div>
         <div class="actions">
@@ -25,7 +25,8 @@
           <dt>Content-Type</dt><dd class="mono">{{ pdf.content_type or "—" }}</dd>
           <dt>File size</dt><dd>{{ pdf.content_length }} bytes</dd>
           <dt>SHA-256</dt><dd class="mono small" title="{{ pdf.sha256 }}">{{ pdf.sha256 or "—" }}</dd>
-          <dt>Valid PDF</dt><dd>{{ "Yes" if pdf.classification in ("TEXT_PDF", "SCANNED_OR_EMPTY_PDF") else "Not validated" }}</dd>
+          <dt>Source type</dt><dd>{{ resource_type }}</dd>
+          <dt>Content validated</dt><dd>{{ "Yes" if pdf.classification in ("TEXT_PDF", "SCANNED_OR_EMPTY_PDF", "HTML") else "Not validated" }}</dd>
           <dt>Classification</dt><dd>{{ pdf.classification or "—" }}</dd>
           <dt>Submitted</dt><dd>{{ pdf.created_at }}</dd>
           {% if pdf.error %}<dt>Last error</dt><dd style="color:var(--red)">{{ pdf.error }}</dd>{% endif %}
@@ -33,7 +34,7 @@
         <div class="flex mt-16 wrap">
           <a class="btn btn-sm" href="{{ pdf.original_url }}" target="_blank" rel="noopener">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>
-            View Original PDF
+            {{ "View Original PDF" if resource_type == "PDF" else "Open Original Web Page" if resource_type == "HTML" else "Open Original URL" }}
           </a>
           <button class="btn btn-sm" id="btn-retry">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
@@ -46,9 +47,16 @@
     </div>
 
     <div class="card">
-      <div class="card-head"><div><h3>PDF analysis</h3><div class="sub">extracted by PyMuPDF — never re-hosted</div></div></div>
+      <div class="card-head"><div><h3>{{ "Webpage analysis" if resource_type == "HTML" else "PDF analysis" if resource_type == "PDF" else "Source analysis" }}</h3><div class="sub">{{ "Bounded HTML text extraction — no script execution" if resource_type == "HTML" else "Metadata and text from the source — never re-hosted" }}</div></div></div>
       <div class="card-body">
         <div class="meta-list">
+          {% if resource_type == "HTML" %}
+          <dt>Title / heading</dt><dd>{{ html_metadata.title or "—" }}</dd>
+          <dt>Description</dt><dd>{{ html_metadata.description or "Not declared" }}</dd>
+          <dt>Source canonical</dt><dd>{{ html_metadata.canonical or "Not declared" }}</dd>
+          <dt>Source robots</dt><dd>{{ html_metadata.robots or "Not declared" }}</dd>
+          <dt>Extraction limited</dt><dd>{{ "Yes" if html_metadata.extractionLimited else "No" }}</dd>
+          {% else %}
           <dt>Page count</dt><dd>{{ pdf.page_count or "—" }}</dd>
           <dt>Title</dt><dd>{{ pdf.title or "—" }}</dd>
           <dt>Author</dt><dd>{{ pdf.author or "—" }}</dd>
@@ -57,12 +65,13 @@
           <dt>Producer</dt><dd class="mono small">{{ pdf.producer or "—" }}</dd>
           <dt>PDF created</dt><dd>{{ pdf.created_date or "—" }}</dd>
           <dt>PDF modified</dt><dd>{{ pdf.modified_date or "—" }}</dd>
+          {% endif %}
           <dt>Text length</dt><dd>{{ pdf.text_length or 0 }} chars</dd>
           <dt>Language (estimate)</dt><dd>{{ pdf.language or "—" }}</dd>
         </div>
         {% if pdf.first_page_text %}
         <hr class="divider">
-        <div class="small faint mb-8">FIRST-PAGE PREVIEW (excerpt, not the full document)</div>
+        <div class="small faint mb-8">{{ "WEBPAGE TEXT PREVIEW" if resource_type == "HTML" else "FIRST-PAGE PREVIEW" }} (excerpt, not the full resource)</div>
         <div class="pdf-excerpt">{{ pdf.first_page_text | truncate(800) }}</div>
         {% endif %}
       </div>
@@ -149,7 +158,7 @@
     } catch (e) { App.toast("Probe failed", e.message, "error"); }
   });
   document.getElementById("btn-delete").addEventListener("click", async () => {
-    const ok = await App.confirmModal("Delete this PDF?", "Removes the record and its dedicated page (and from sitemap/RSS).", { confirmLabel: "Delete", danger: true });
+    const ok = await App.confirmModal("Delete this resource?", "Removes the record and its dedicated page (and from sitemap/RSS).", { confirmLabel: "Delete", danger: true });
     if (!ok) return;
     try {
       await App.api(`/api/pdfs/${PDF_ID}`, { method: "DELETE" });

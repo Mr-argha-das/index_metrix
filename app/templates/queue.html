@@ -20,7 +20,7 @@
     <div class="table-wrap">
       <table class="data">
         <thead><tr>
-          <th>Job</th><th>Type</th><th>PDF</th><th>Status</th><th>Attempts</th><th>Priority</th><th>Created</th><th>Completed</th><th>Error</th>
+          <th>Job</th><th>Type</th><th>Resource</th><th>Status</th><th>Attempts</th><th>Priority</th><th>Created</th><th>Completed</th><th>Error</th>
           {% if current_user and current_user.role == 'ADMIN' %}<th class="right">Actions</th>{% endif %}
         </tr></thead>
         <tbody id="jobs-tbody">
@@ -31,8 +31,8 @@
     <div class="empty-state" id="jobs-empty" style="display:none">
       <div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg></div>
       <h4>Queue is empty</h4>
-      <p>Submit a PDF URL and its processing jobs will appear here with live status, attempts and errors.</p>
-      <a class="btn btn-primary" href="/submit">Submit a PDF URL</a>
+      <p>Submit a URL and its processing jobs will appear here with live status, attempts and errors.</p>
+      <a class="btn btn-primary" href="/submit">Submit a URL</a>
     </div>
   </div>
 </div>
@@ -64,7 +64,7 @@
         <tr>
           <td class="mono">#${j.id}</td>
           <td>${App.pill(j.job_type)}</td>
-          <td class="mono">${j.pdf_id ? "PDF #" + j.pdf_id : "—"}</td>
+          <td class="mono">${j.pdf_id ? "Resource #" + j.pdf_id : "—"}</td>
           <td>${App.pill(j.status)}</td>
           <td class="mono">${j.attempts}/${j.max_attempts}</td>
           <td class="mono">${j.priority}</td>

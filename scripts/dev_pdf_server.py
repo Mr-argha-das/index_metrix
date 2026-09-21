@@ -104,7 +104,7 @@ def make_app(port: int = 8899) -> aiohttp.web.Application:
         return aiohttp.web.Response(body=b"%PDF-1.4\n" + b"\0" * (40 * 1024 * 1024), content_type="application/pdf")
 
     async def html_article(request):
-        variant = request.match_info["variant"]
+        variant = request.match_info.get("variant", "home")
         title = "Browser safety and document references"
         robots = "noindex" if variant == "noindex" else "index,follow"
         text = ("This article explains how public references describe documents while preserving "
@@ -114,12 +114,26 @@ def make_app(port: int = 8899) -> aiohttp.web.Application:
             text = "Click this article."
         if variant == "challenge":
             title = "Verify you are human"
-        return aiohttp.web.Response(text=f'''<!doctype html><html><head><title>{title}</title>
+        title_tag = "" if variant == "heading-only" else f"<title>{title}</title>"
+        body = f"<main><h1>{title}</h1><p>{text}</p></main>" if variant != "js-only" else "<main></main>"
+        html = f'''<!doctype html><html><head>{title_tag}
             <meta name="description" content="Practical notes about safe resource discovery.">
-            <meta name="robots" content="{robots}"><link rel="canonical" href="/blog/article"></head>
-            <body><main><h1>{title}</h1><p>{text}</p></main><script>not real content</script></body></html>''',
-            content_type="text/html")
+            <meta name="robots" content="{robots}"><link rel="canonical" href="{request.path}"></head>
+            <body>{body}<script>not real content</script></body></html>'''
+        mime = {"generic": "application/octet-stream", "plain": "text/plain", "xhtml": "application/xhtml+xml"}.get(variant, "text/html")
+        return aiohttp.web.Response(body=html.encode(), content_type=mime)
 
+    async def redirect_webpage(request):
+        raise aiohttp.web.HTTPFound("/pages/about.php")
+
+    async def unsupported_resource(request):
+        return aiohttp.web.json_response({"message": "A JSON API is not an HTML page or a PDF."})
+
+    app.router.add_get("/", html_article)
+    app.router.add_get("/pages/about.php", html_article)
+    app.router.add_get("/go/about", redirect_webpage)
+    app.router.add_get("/api/document", unsupported_resource)
+    app.router.add_get("/download", serve_pdf)
     app.router.add_get("/blog/{variant}", html_article)
     app.router.add_get("/docs/report.pdf", serve_pdf)
     app.router.add_get("/docs/report-octetstream.pdf", serve_octet)

@@ -64,7 +64,7 @@
              No JavaScript. The file is hosted by the source publisher, not us. -->
         <a class="pdf-cta" href="{{ original_url }}" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
-          {{ "View Original PDF" if resource_type == "PDF" else "Read Original Article" }}
+          {{ "View Original PDF" if resource_type == "PDF" else "Open Original Web Page" }}
         </a>
         {% if demo_job %}<a class="pdf-cta alt" href="#demo-apply">Application information — demo</a>{% endif %}
         <a class="pdf-cta alt" href="/sitemap.xml">
@@ -101,7 +101,7 @@
           </div>
           {% if excerpt %}
           <hr class="divider">
-          <div class="small faint mb-8">PREVIEW — {{ "first-page excerpt" if resource_type == "PDF" else "article excerpt" }} (not the full resource)</div>
+          <div class="small faint mb-8">PREVIEW — {{ "first-page excerpt" if resource_type == "PDF" else "webpage excerpt" }} (not the full resource)</div>
           <div class="pdf-excerpt">{{ excerpt }}</div>
           {% else %}
           <p>Text extraction was unavailable or no extractable text was found. No document content has been inferred.</p>
@@ -114,7 +114,7 @@
           <div class="card-head"><div><h3>Technical summary</h3></div></div>
           <div class="card-body small" style="color:var(--muted)">
             {% if resource_type == "PDF" %}<p style="margin:0 0 8px">This file was fetched and validated by {{ app_name }}: HTTP status, Content-Type and the <span class="mono">%PDF-</span> signature were all checked, and structure metadata was extracted without re-hosting the file.</p>
-            {% else %}<p>This HTML page was fetched safely and analyzed for title, description and useful text. Scripts were not executed and the article is not re-hosted.</p>
+            {% else %}<p>This HTML page was fetched safely and analyzed for title, description and useful text. Scripts were not executed and the source page is not re-hosted.</p>
             <p>Source canonical: {{ html_metadata.canonical or "Not declared" }}</p>
             <p>Source robots: {{ html_metadata.robots or "Not declared" }}</p>{% endif %}
             <p style="margin:0">Classification: <strong style="color:var(--text)">{{ classification or "unknown" }}</strong>{% if language %} · language estimate: <strong style="color:var(--text)">{{ language }}</strong>{% endif %}</p>

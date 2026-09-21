@@ -9,12 +9,12 @@
   <div class="col">
     <div class="card">
       <div class="card-head">
-        <div><h3>Paste PDF or article URLs</h3><div class="sub">one URL per line, or comma separated</div></div>
+        <div><h3>Paste PDF or normal webpage URLs</h3><div class="sub">Homepages, blogs, articles and PDFs — one URL per line, or comma separated</div></div>
       </div>
       <div class="card-body">
         <div class="field">
-          <textarea class="input mono" id="submit-text" rows="10" placeholder="https://example.com/file1.pdf&#10;https://example.com/file2.pdf&#10;https://example.com/file3.pdf"></textarea>
-          <span class="hint">Only <span class="mono">http://</span> and <span class="mono">https://</span> are accepted. Private, loopback and internal addresses are rejected by the SSRF guard.</span>
+          <textarea class="input mono" id="submit-text" rows="10" placeholder="https://example.com/&#10;https://example.com/blog/article&#10;https://example.com/document.pdf"></textarea>
+          <span class="hint">A .pdf extension is not required. Only <span class="mono">http://</span> and <span class="mono">https://</span> are accepted. Private, loopback and internal addresses are rejected by the SSRF guard.</span>
         </div>
         <div class="form-row">
           <div class="field">
@@ -40,8 +40,8 @@
         <div class="timeline">
           <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">RECEIVED</div><div class="tl-msg">URL recorded and queued (dedupe by normalized-URL hash).</div></div>
           <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">VALIDATED</div><div class="tl-msg">Scheme, host, DNS and private-IP checks (SSRF protection, every redirect).</div></div>
-          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">PDF CHECKED</div><div class="tl-msg">Content-Type + <span class="mono">%PDF-</span> signature; never trust headers alone.</div></div>
-          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">ANALYZED</div><div class="tl-msg">PyMuPDF extracts pages, metadata, SHA-256, text preview.</div></div>
+          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">CONTENT CHECKED</div><div class="tl-msg">Detect PDF or HTML from the response. Only PDF documents require the <span class="mono">%PDF-</span> signature.</div></div>
+          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">ANALYZED</div><div class="tl-msg">PDF: structure, metadata and text. Webpage: title or heading, description, canonical and useful text; scripts are not executed.</div></div>
           <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">PAGE PUBLISHED</div><div class="tl-msg">A clearly labelled fictional demo at /jobs/&lt;number&gt;, with actual source metadata and an ordinary source link. No real vacancy is asserted.</div></div>
           <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">DISCOVERY PENDING</div><div class="tl-msg">Page added to sitemap.xml + rss.xml; search engines may discover it — not guaranteed.</div></div>
         </div>
@@ -50,8 +50,11 @@
     <div class="card">
       <div class="card-head"><div><h3>URL format example</h3></div></div>
       <div class="card-body">
-        <div class="code-block">https://your-public-site.example/documents/source.pdf</div>
-        <p class="small faint mt-8">This is a placeholder, not a working test URL. Replace it with a reachable public PDF or article. Browser access does not guarantee server access; failed rows show the actual failure reason.</p>
+        <div class="code-block">https://your-public-site.example/
+https://your-public-site.example/about
+https://your-public-site.example/blog/post
+https://your-public-site.example/documents/source.pdf</div>
+        <p class="small faint mt-8">This is a placeholder, not a working test URL. Replace it with a reachable public PDF or HTML webpage. Login walls, robots/noindex restrictions, JavaScript-only shells and pages without useful text cannot be published. Browser access does not guarantee server access; failed rows show the actual failure reason.</p>
       </div>
     </div>
   </div>

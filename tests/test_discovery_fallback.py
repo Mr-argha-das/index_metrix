@@ -62,7 +62,7 @@ def test_publication_uses_normal_discovery_not_google_api(client, pdf_server_url
         assert record['type'] == 'HTML' and record['classification'] == 'HTML'
         assert record['pages'] is None and record['textLength'] >= 120
         assert record['sha256'] and record['htmlMetadata']['canonical'].endswith('/blog/article')
-        assert 'Read Original Article' in response.text
+        assert 'Open Original Web Page' in response.text
         assert 'Validated PDF' not in response.text and '%PDF-' not in response.text
         assert 'not real content' not in response.text
     else:

@@ -154,7 +154,7 @@
     if (empty) empty.style.display = "none";
     tbody.innerHTML = pdfs
       .map((p) => {
-        const title = p.title || "Untitled PDF";
+        const title = p.title || "Untitled resource";
         return `<tr>
           <td class="recent-resource"><div class="cell-main">${esc(title)}</div>
             <div class="cell-sub recent-source-url" title="${esc(p.normalized_url || "")}">${esc(shortUrl(p.normalized_url))}</div></td>
@@ -176,7 +176,7 @@
     const host = document.getElementById("event-feed");
     if (!host) return;
     if (!events || !events.length) {
-      host.innerHTML = '<div class="muted small" style="padding:14px">No events yet — submit a PDF URL to get started.</div>';
+      host.innerHTML = '<div class="muted small" style="padding:14px">No events yet — submit a PDF or webpage URL to get started.</div>';
       return;
     }
     host.innerHTML = events
@@ -189,7 +189,7 @@
           e.status === "ERROR" ? "var(--red-soft)" :
           e.status === "SUCCESS" ? "var(--green-soft)" :
           e.status === "WARN" ? "var(--amber-soft)" : "var(--blue-soft)";
-        const name = e.pdf_id ? `PDF #${e.pdf_id}` : e.user_id ? `User #${e.user_id}` : "system";
+        const name = e.pdf_id ? `Resource #${e.pdf_id}` : e.user_id ? `User #${e.user_id}` : "system";
         return `<div class="event-row">
           <span class="e-icon" style="background:${soft};color:${color}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="4"/></svg>

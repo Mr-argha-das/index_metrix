@@ -310,13 +310,16 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
     if result.status != 200:
         raise PipelineFinal(f"Unexpected HTTP status {result.status}.", ST_FAILED)
 
+    from urllib.parse import unquote, urlsplit
+    from ..pdf.html import extract_html, is_html_response
+
     analysis = None
-    if not check_signature(result.content) and result.content_type in ("text/html", "application/xhtml+xml"):
-        from ..pdf.html import extract_html
+    is_pdf = check_signature(result.content)
+    expects_pdf = any(unquote(urlsplit(url).path).lower().endswith(".pdf")
+                      for url in (vurl.url, result.final_url)) or result.content_type in ("application/pdf", "application/x-pdf")
+    if not is_pdf and is_html_response(result.content, result.content_type):
         metadata = await asyncio.to_thread(extract_html, result.content, result.final_url)
         await repos.pdfs.update(pdf_id, html_metadata=json_dumps(metadata))
-        from urllib.parse import urlsplit
-        expects_pdf = urlsplit(vurl.url).path.lower().endswith(".pdf")
         headers = {k.lower(): v for k, v in result.headers.items()}
         noindex = any(word in headers.get("x-robots-tag", "").lower() for word in ("noindex", "none"))
         if expects_pdf or noindex or not metadata["publishable"]:
@@ -328,10 +331,16 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
                                first_page_text=metadata["excerpt"], text_length=metadata["textLength"],
                                page_count=None, author=None, subject=None, creator=None, producer=None,
                                created_date=None, modified_date=None, language=None)
-        await repos.events.add("HTML_VALID", "HTML article analyzed from source text and metadata.", pdf_id=pdf_id, status="SUCCESS")
+        await repos.events.add("HTML_VALID", "HTML web page analyzed from source text and metadata.", pdf_id=pdf_id, status="SUCCESS")
     else:
         # ---- STEP 4: PDF signature (never trust Content-Type alone) --------------
-        if not check_signature(result.content):
+        if not is_pdf and not expects_pdf:
+            raise PipelineFinal(
+                f"Unsupported source content type '{result.content_type or 'unknown'}'. "
+                "Submit a public HTML web page or PDF document. No page was published.",
+                ST_INVALID, classification="UNSUPPORTED_CONTENT",
+            )
+        if not is_pdf:
             raise PipelineFinal(
                 f"Content mismatch: HTTP {result.status} with type "
                 f"'{result.content_type or 'none'}' but the body does not contain "

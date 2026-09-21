@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set title = "URLs" %}
-{% set subtitle = "All submitted PDF URLs and their lifecycle" %}
+{% set subtitle = "Submitted PDF and webpage URLs and their lifecycle" %}
 {% set nav = "urls" %}
 {% block content %}
 <div class="card mb-16">
@@ -15,7 +15,7 @@
     <form id="quick-submit" class="mt-8">
       <div class="form-row" style="grid-template-columns: 2fr 1fr auto; align-items:end">
         <div class="field mb-0">
-          <textarea class="input mono" id="quick-submit-text" rows="3" placeholder="https://example.com/file1.pdf&#10;https://example.com/file2.pdf" style="min-height:70px"></textarea>
+          <textarea class="input mono" id="quick-submit-text" rows="3" placeholder="https://example.com/about&#10;https://example.com/document.pdf" style="min-height:70px"></textarea>
         </div>
         <div class="field mb-0">
           <label>or upload file</label>
@@ -50,7 +50,7 @@
     <div class="empty-state" id="urls-empty" style="display:none">
       <div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></div>
       <h4>No URLs match</h4>
-      <p>Try different filters, or submit a new PDF URL above.</p>
+      <p>Try different filters, or submit a new PDF or webpage URL above.</p>
     </div>
     <div class="flex-between" style="padding:12px 16px">
       <span class="small faint" id="pagination-info">…</span>
@@ -63,5 +63,5 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/urls.js?v=failure-reason-1"></script>
+<script src="/static/js/urls.js?v=web-urls-1"></script>
 {% endblock %}

@@ -127,11 +127,11 @@
             toast("Retry failed", e.message, "error");
           }
         } else if (btn.dataset.action === "delete") {
-          const ok = await confirmModal("Delete this PDF?", "This removes the PDF record and its dedicated page (and therefore from sitemap/RSS). This cannot be undone.", { confirmLabel: "Delete", danger: true });
+          const ok = await confirmModal("Delete this resource?", "This removes the resource record and its dedicated page (and therefore from sitemap/RSS). This cannot be undone.", { confirmLabel: "Delete", danger: true });
           if (!ok) return;
           try {
             await api(`/api/pdfs/${id}`, { method: "DELETE" });
-            toast("Deleted", "PDF record removed.", "success");
+            toast("Deleted", "Resource record removed.", "success");
             load();
           } catch (e) {
             toast("Delete failed", e.message, "error");

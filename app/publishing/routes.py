@@ -72,7 +72,7 @@ async def pdf_dedicated_page(slug: str, request: Request):
 @router.api_route("/jobs/{number}", include_in_schema=False, methods=["GET", "HEAD"])
 async def fictional_job_page(number: str, request: Request):
     if not number.isascii() or not number.isdigit() or len(number) > 18 or str(int(number)) != number:
-        raise HTTPException(404, "Demo job page not found.")
+        raise HTTPException(404, "Job page not found.")
     pages = await _repos(request).pages.find(
         lambda p: p.get("page_kind") == "demo-job" and p.get("job_number") == int(number))
     if not pages:
@@ -83,7 +83,7 @@ async def fictional_job_page(number: str, request: Request):
         raise HTTPException(404, "Source record not found.")
     ctx = build_pdf_page_context(pdf, page, None, _settings(request))
     if not ctx["demo_job"] or ctx["demo_job"].get("isFictional") is not True:
-        raise HTTPException(503, "Stored demo content unavailable.")
+        raise HTTPException(503, "Stored generated job content unavailable.")
     return templates.render(request, "pdf_page.html", ctx)
 
 

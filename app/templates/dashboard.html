@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% set title = "Dashboard" %}
+{% set subtitle = "PDF Discovery & Monitoring" %}
+{% set nav = "dashboard" %}
+{% block content %}
+<div class="flex-between mb-16 wrap">
+  <div>
+    <div class="flex">
+      <span class="pill blue" style="font-size:10.5px"><span class="dot pulse" id="live-dot"></span>live</span>
+      <span class="small faint">auto-refreshes every few seconds — no reloads</span>
+    </div>
+  </div>
+  <a class="btn btn-sm" href="/urls">All URLs
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="14" height="14"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  </a>
+</div>
+
+<div class="kpi-grid" id="kpi-grid">
+  {% for i in range(9) %}
+  <div class="kpi skeleton"><div class="kpi-top"><span class="kpi-label">Loading</span></div><div class="kpi-value">0</div><div class="kpi-foot">&nbsp;</div></div>
+  {% endfor %}
+</div>
+
+<div class="dash-grid">
+  <div class="col">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h3>Status overview</h3>
+          <div class="sub">pipeline state of every URL (evidence-based badges)</div>
+        </div>
+        <div class="actions"><span class="small faint">last 7 days →</span></div>
+      </div>
+      <div class="card-body">
+        <div class="charts-row">
+          <div class="donut-wrap">
+            <svg id="status-donut" width="150" height="150"></svg>
+            <div class="donut-center"><div class="num">0</div><div class="lbl">URLs</div></div>
+          </div>
+          <div class="legend" id="status-legend"><div class="muted small">Loading…</div></div>
+        </div>
+        <hr class="divider">
+        <div class="small faint mb-8">SUBMISSIONS PER DAY</div>
+        <div class="bars" id="submissions-bars"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div><h3>Recent URLs</h3><div class="sub">latest submissions and their lifecycle</div></div>
+        <div class="actions"><a class="btn btn-sm" href="/submit">Submit new</a></div>
+      </div>
+      <div class="card-body flush">
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr>
+              <th>URL</th><th>Source</th><th>Status</th><th>Discovery</th><th>Crawl</th><th>Index</th><th>Updated</th><th class="right">Actions</th>
+            </tr></thead>
+            <tbody id="recent-tbody">
+              <tr><td colspan="8" class="skeleton" style="padding:14px">&nbsp;</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="recent-empty" style="display:none">
+          <div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+          <h4>No PDF URLs yet</h4>
+          <p>Submit your first PDF URL and watch the full lifecycle play out here — validation, analysis, page publishing and discovery.</p>
+          <a class="btn btn-primary" href="/submit">Submit a PDF URL</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <div class="card-head"><div><h3>Processing queue</h3><div class="sub">in-flight jobs and throughput</div></div></div>
+      <div class="card-body">
+        <div class="queue-mini" id="queue-mini">
+          <div class="qm skeleton"><div class="qm-num">0</div><div class="qm-lbl">Pending</div></div>
+          <div class="qm skeleton"><div class="qm-num">0</div><div class="qm-lbl">Running</div></div>
+          <div class="qm skeleton"><div class="qm-num">0</div><div class="qm-lbl">Completed</div></div>
+          <div class="qm skeleton"><div class="qm-num">0</div><div class="qm-lbl">Failed</div></div>
+        </div>
+        <div class="progress-thin mt-16"><div id="queue-progress" style="width:0%"></div></div>
+        <div class="flex-between small faint mt-8"><span>job throughput</span><span><a href="/queue" style="color:var(--muted)">open queue →</a></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h3>Recent events</h3><div class="sub">audit trail — every state transition</div></div></div>
+      <div class="card-body event-feed" id="event-feed">
+        <div class="skeleton" style="height:44px;margin-bottom:8px">&nbsp;</div>
+        <div class="skeleton" style="height:44px;margin-bottom:8px">&nbsp;</div>
+        <div class="skeleton" style="height:44px">&nbsp;</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h3>Evidence policy</h3><div class="sub">how index status is decided</div></div></div>
+      <div class="card-body small" style="color:var(--muted)">
+        <p style="margin:0 0 8px"><span class="pill green" style="margin-right:6px"><span class="dot"></span>Indexed</span>only with authoritative evidence (e.g. Google Search Console for a property we are authorized to inspect).</p>
+        <p style="margin:0 0 8px"><span class="pill slate" style="margin-right:6px"><span class="dot"></span>Unknown</span>default for everything else — including third-party PDFs, which we never own.</p>
+        <p style="margin:0">Our server fetches are <strong>technical probes</strong>, never reported as search-engine crawls.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

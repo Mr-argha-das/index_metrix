@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set title = "URLs" %}
+{% set subtitle = "All submitted PDF URLs and their lifecycle" %}
+{% set nav = "urls" %}
+{% block content %}
+<div class="card mb-16">
+  <div class="card-body">
+    <div class="flex-between wrap">
+      <div>
+        <h3 style="font-size:15px">Quick submit</h3>
+        <div class="sub small">One URL per line, or comma separated. TXT/CSV files welcome.</div>
+      </div>
+      <span class="small faint">validated + SSRF-checked before entering the queue</span>
+    </div>
+    <form id="quick-submit" class="mt-8">
+      <div class="form-row" style="grid-template-columns: 2fr 1fr auto; align-items:end">
+        <div class="field mb-0">
+          <textarea class="input mono" id="quick-submit-text" rows="3" placeholder="https://example.com/file1.pdf&#10;https://example.com/file2.pdf" style="min-height:70px"></textarea>
+        </div>
+        <div class="field mb-0">
+          <label>or upload file</label>
+          <input class="input" id="quick-submit-file" type="file" accept=".txt,.csv">
+        </div>
+        <div class="field mb-0">
+          <button class="btn btn-primary" id="quick-submit-btn" type="submit">Submit</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <div class="tabs" id="url-filters" style="border:none;margin:0;flex:1;overflow-x:auto"></div>
+    <div class="actions">
+      <input class="input" id="url-search" placeholder="Search URLs…" style="width:200px">
+    </div>
+  </div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr>
+          <th>URL / Title</th><th>Source</th><th>PDF</th><th>Size</th><th>Pages</th><th>Page</th><th>Status</th><th>Index</th><th>Updated</th><th class="right">Actions</th>
+        </tr></thead>
+        <tbody id="urls-tbody">
+          <tr><td colspan="10" class="skeleton" style="padding:14px">&nbsp;</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="urls-empty" style="display:none">
+      <div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></div>
+      <h4>No URLs match</h4>
+      <p>Try different filters, or submit a new PDF URL above.</p>
+    </div>
+    <div class="flex-between" style="padding:12px 16px">
+      <span class="small faint" id="pagination-info">…</span>
+      <span class="flex">
+        <button class="btn btn-sm" id="page-prev">← Prev</button>
+        <button class="btn btn-sm" id="page-next">Next →</button>
+      </span>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/urls.js"></script>
+{% endblock %}

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} — {{ app_name }}</title>
+  <meta name="description" content="{{ description }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="{{ app_name }}">
+  <meta property="og:title" content="{{ title }}">
+  <meta property="og:description" content="{{ description }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:locale" content="en_US">
+  {% if published_at %}<meta property="article:published_time" content="{{ page.published_at if page else '' }}">{% endif %}
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ title }}">
+  <meta name="twitter:description" content="{{ description }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%236366f1'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E%3E%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <link rel="stylesheet" href="/static/css/responsive.css">
+  <script>
+    try { var t = localStorage.getItem("bi-theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  </script>
+  <script type="application/ld+json">
+{{ jsonld | safe }}
+  </script>
+</head>
+<body class="pdf-page-shell">
+  <header class="pdf-page-header">
+    <div class="pdf-page-inner flex-between" style="padding-top:16px;padding-bottom:16px">
+      <a href="/" style="display:flex;align-items:center;gap:10px;color:var(--text)">
+        <div class="brand-logo" style="width:30px;height:30px;font-size:12px">BI</div>
+        <span style="font-weight:750;font-size:14px">{{ app_name }}</span>
+      </a>
+      <span class="small faint">PDF discovery reference page</span>
+    </div>
+  </header>
+
+  <div class="pdf-page-inner">
+    <div class="pdf-page-hero">
+      <div class="flex wrap" style="gap:8px;margin-bottom:14px">
+        <span class="pill green"><span class="dot"></span>Validated PDF</span>
+        {% if classification %}<span class="pill {{ 'green' if classification == 'TEXT_PDF' else 'amber' }}">{{ classification.replace('_', ' ') }}</span>{% endif %}
+        <span class="pill slate"><span class="dot"></span>Source: {{ source_domain }}</span>
+      </div>
+      <h1>{{ title }}</h1>
+      <p class="desc">{{ description }}</p>
+
+      <div class="pdf-cta-row">
+        <!-- Main CTA: a normal HTML link to the ORIGINAL third-party PDF.
+             No JavaScript. The file is hosted by the source publisher, not us. -->
+        <a class="pdf-cta" href="{{ original_url }}" target="_blank" rel="noopener nofollow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
+          View Original PDF
+        </a>
+        <a class="pdf-cta alt" href="/sitemap.xml">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3-3 3"/><path d="M2 12c0-1.7 1.3-3 3-3h14M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2h-4"/></svg>
+          Sitemap
+        </a>
+      </div>
+      <p class="small faint" style="margin-top:10px">
+        The document is hosted by its original publisher at
+        <span class="mono">{{ original_url }}</span> — this page only validates, describes and links to it.
+      </p>
+    </div>
+
+    <div class="pdf-page-grid">
+      <div class="card">
+        <div class="card-head"><div><h3>About this document</h3><div class="sub">metadata extracted from the PDF itself</div></div></div>
+        <div class="card-body">
+          <div class="meta-list">
+            <dt>Document title</dt><dd>{{ title }}</dd>
+            <dt>Source</dt><dd><a href="{{ original_url }}" rel="noopener">{{ source_domain }}</a></dd>
+            <dt>Author</dt><dd>{{ author or "Not stated in PDF metadata" }}</dd>
+            <dt>Pages</dt><dd>{{ page_count if page_count else "—" }}</dd>
+            <dt>File size</dt><dd>{{ file_size }} bytes ({{ '%.1f' | format((file_size or 0) / 1048576) }} MB)</dd>
+            <dt>PDF created</dt><dd>{{ created_date or "—" }}</dd>
+            <dt>PDF modified</dt><dd>{{ modified_date or "—" }}</dd>
+            <dt>Producer</dt><dd>{{ producer or "—" }}</dd>
+            <dt>Text characters</dt><dd>{{ text_length or 0 }}</dd>
+            {% if sha256 %}<dt>SHA-256</dt><dd class="mono small">{{ sha256 }}</dd>{% endif %}
+            <dt>Page published</dt><dd>{{ published_at }}</dd>
+            <dt>Last updated</dt><dd>{{ updated_at }}</dd>
+          </div>
+          {% if excerpt %}
+          <hr class="divider">
+          <div class="small faint mb-8">PREVIEW — first-page excerpt (a short extract, not the full document)</div>
+          <div class="pdf-excerpt">{{ excerpt }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <div class="card-head"><div><h3>Technical summary</h3></div></div>
+          <div class="card-body small" style="color:var(--muted)">
+            <p style="margin:0 0 8px">This file was fetched and validated by {{ app_name }}: HTTP status, Content-Type and the <span class="mono">%PDF-</span> signature were all checked, and structure metadata was extracted without re-hosting the file.</p>
+            <p style="margin:0">Classification: <strong style="color:var(--text)">{{ classification or "unknown" }}</strong>{% if language %} · language estimate: <strong style="color:var(--text)">{{ language }}</strong>{% endif %}</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>Discovery</h3></div></div>
+          <div class="card-body small" style="color:var(--muted)">
+            <p style="margin:0">This page is listed in the site <a href="/sitemap.xml">sitemap</a> and <a href="/rss.xml">RSS feed</a> so search engines can find it. Indexing, when it happens, is decided by the search engines — it is not something this service can force or verify for third-party files.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="pdf-page-footer">
+      <div class="flex-between wrap">
+        <span>© {{ published_at[:4] }} {{ app_name }} — PDF URL validation, publishing & monitoring.</span>
+        <span class="flex"><a href="/sitemap.xml">sitemap.xml</a> · <a href="/rss.xml">rss.xml</a> · <a href="/robots.txt">robots.txt</a></span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

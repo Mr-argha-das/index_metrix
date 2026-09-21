@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% set title = "RSS Feed" %}
+{% set subtitle = "Newly published dedicated pages" %}
+{% set nav = "rss" %}
+{% block content %}
+<div class="card">
+  <div class="card-head">
+    <div><h3>rss.xml</h3><div class="sub">{{ pages | length }} item(s) — pubDate is the real publication time, never bumped without a change</div></div>
+    <div class="actions">
+      <a class="btn btn-sm" href="/rss.xml" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>
+        Open XML
+      </a>
+    </div>
+  </div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Title</th><th>Link</th><th>Description</th><th>pubDate</th></tr></thead>
+        <tbody>
+          {% for p in pages %}
+          <tr>
+            <td class="cell-main">{{ p.title }}</td>
+            <td class="mono small"><a href="/pdf/{{ p.slug }}" target="_blank" rel="noopener">/pdf/{{ p.slug }}</a></td>
+            <td class="cell-sub">{{ (p.description or "")[:120] }}</td>
+            <td class="cell-sub">{{ p.published_at }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4"></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not pages %}
+    <div class="empty-state">
+      <div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.6" fill="currentColor"/></svg></div>
+      <h4>RSS feed is empty</h4>
+      <p>Published dedicated pages appear here as RSS items.</p>
+      <a class="btn btn-primary" href="/submit">Submit a PDF URL</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

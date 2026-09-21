@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% set title = "Integrations" %}
+{% set subtitle = "Google Search Console & Bing Webmaster (optional)" %}
+{% set nav = "integrations" %}
+{% block content %}
+<div class="grid-2">
+  <div class="card">
+    <div class="card-head">
+      <div><h3>Google Search Console</h3><div class="sub">authorized properties only — never third-party domains</div></div>
+      <div class="actions">{{ integration_pill(google.status) }}</div>
+    </div>
+    <div class="card-body">
+      <div class="meta-list mb-16">
+        <dt>Property</dt><dd class="mono">{{ google.property_url }}</dd>
+        <dt>Authorized sites</dt><dd class="small mono">{{ google.authorized_sites or "—" }}</dd>
+        <dt>Last check</dt><dd class="small">{{ google.last_check_at or "never" }} {% if google.last_check_message %}<span class="faint">— {{ google.last_check_message }}</span>{% endif %}</dd>
+      </div>
+      <div class="field">
+        <label for="gsc-property">Property URL (our own site)</label>
+        <input class="input mono" id="gsc-property" value="{{ google.property_url }}" placeholder="https://our-domain.com/">
+      </div>
+      <div class="flex wrap">
+        <button class="btn btn-sm" data-integ="google" data-act="config">Save property</button>
+        <button class="btn btn-sm" data-integ="google" data-act="test">Test connection</button>
+        <button class="btn btn-sm" data-integ="google" data-act="sitemap">Submit sitemap</button>
+        <span class="small faint" id="gsc-note"></span>
+      </div>
+      {% if not google.configured %}
+      <div class="evidence-card mt-16">
+        <span class="ev-source">Not configured</span>
+        Set <span class="mono">GOOGLE_SERVICE_ACCOUNT_JSON</span> (path to a service-account JSON with the
+        <span class="mono">webmasters</span> scope) in <span class="mono">.env</span>, then “Test connection”.
+        The Google Indexing API is intentionally not implemented (blog/video content types only).
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div><h3>Bing Webmaster Tools</h3><div class="sub">verified sites only</div></div>
+      <div class="actions">{{ integration_pill(bing.status) }}</div>
+    </div>
+    <div class="card-body">
+      <div class="meta-list mb-16">
+        <dt>Property</dt><dd class="mono">{{ bing.property_url }}</dd>
+        <dt>Verified sites</dt><dd class="small mono">{{ bing.authorized_sites or "—" }}</dd>
+        <dt>Last check</dt><dd class="small">{{ bing.last_check_at or "never" }} {% if bing.last_check_message %}<span class="faint">— {{ bing.last_check_message }}</span>{% endif %}</dd>
+      </div>
+      <div class="field">
+        <label for="bing-property">Site URL (our own site)</label>
+        <input class="input mono" id="bing-property" value="{{ bing.property_url }}" placeholder="https://our-domain.com/">
+      </div>
+      <div class="flex wrap">
+        <button class="btn btn-sm" data-integ="bing" data-act="config">Save property</button>
+        <button class="btn btn-sm" data-integ="bing" data-act="test">Test connection</button>
+        <button class="btn btn-sm" data-integ="bing" data-act="sitemap">Submit sitemap</button>
+        <span class="small faint" id="bing-note"></span>
+      </div>
+      {% if not bing.configured %}
+      <div class="evidence-card mt-16">
+        <span class="ev-source">Not configured</span>
+        Set <span class="mono">BING_API_KEY</span> in <span class="mono">.env</span> (a Webmaster Tools API key for your verified site),
+        then “Test connection”.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card mt-16">
+  <div class="card-body small" style="color:var(--muted)">
+    <strong style="color:var(--text)">Honesty policy:</strong> both integrations only act on properties the
+    credentials can actually see (returned by each API’s own property/site list). Anything else reports
+    NOT AUTHORIZED — we never pretend a third-party property is verified, and no integration result is
+    fabricated. For third-party PDFs, index status stays UNKNOWN with the reason displayed.
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  document.querySelectorAll("[data-integ]").forEach(btn => btn.addEventListener("click", async () => {
+    const integ = btn.dataset.integ;
+    const act = btn.dataset.act;
+    const input = document.getElementById(integ + "-property");
+    const note = document.getElementById(integ + "-note");
+    note.textContent = "Working…";
+    const path = integ === "google"
+      ? (act === "sitemap" ? "/api/integrations/google/submit-sitemap"
+         : act === "test" ? "/api/integrations/google/test"
+         : "/api/integrations/google")
+      : (act === "sitemap" ? "/api/integrations/bing/submit-sitemap"
+         : act === "test" ? "/api/integrations/bing/test"
+         : "/api/integrations/bing");
+    try {
+      const r = await App.api(path, { method: "POST", body: { property_url: input.value } });
+      if (act === "test") {
+        note.textContent = r.status === "CONNECTED"
+          ? "Connected — property is in the authorized list."
+          : "Connected to API, but the property is NOT in the authorized list (" + (r.authorized_properties || r.verified_sites || []).length + " authorized).";
+        App.toast("Connection test", note.textContent, r.status === "CONNECTED" ? "success" : "warn");
+      } else if (act === "sitemap") {
+        note.textContent = "Sitemap submitted: " + (r.submitted || "ok");
+        App.toast("Sitemap submitted", r.submitted || "", "success");
+      } else {
+        note.textContent = "Property saved.";
+        App.toast("Property saved", "", "success");
+      }
+      setTimeout(() => location.reload(), 900);
+    } catch (e) {
+      note.textContent = e.message;
+      App.toast("Action failed", e.message, "error");
+    }
+  }));
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% set title = "Settings" %}
+{% set subtitle = "Application configuration (admin)" %}
+{% set nav = "settings" %}
+{% block content %}
+<div class="dash-grid">
+  <div class="col">
+    <div class="card">
+      <div class="card-head"><div><h3>Application</h3><div class="sub">env variables override unsafe production defaults</div></div></div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="field"><label for="s-app_name">Application name</label>
+            <input class="input" id="s-app_name" value="{{ settings.app_name }}"></div>
+          <div class="field"><label for="s-public_base_url">Public domain / base URL</label>
+            <input class="input mono" id="s-public_base_url" value="{{ settings.public_base_url }}">
+            <span class="hint">Used for canonicals, sitemap &amp; robots.txt</span></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="s-session_lifetime_hours">Session lifetime (hours)</label>
+            <input class="input mono" id="s-session_lifetime_hours" type="number" min="1" value="{{ settings.session_lifetime_hours }}"></div>
+          <div class="field"><label for="s-polling_interval_ms">Dashboard polling interval (ms)</label>
+            <input class="input mono" id="s-polling_interval_ms" type="number" min="1000" step="500" value="{{ settings.polling_interval_ms }}"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h3>Fetching &amp; queue</h3></div></div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="field"><label for="s-max_pdf_size_mb">Maximum PDF size (MB)</label>
+            <input class="input mono" id="s-max_pdf_size_mb" type="number" min="1" max="200" value="{{ settings.max_pdf_size_mb }}"></div>
+          <div class="field"><label for="s-http_timeout">Read timeout (seconds)</label>
+            <input class="input mono" id="s-http_timeout" type="number" min="5" max="300" value="{{ settings.http_timeout }}"></div>
+          <div class="field"><label for="s-max_redirects">Max redirects</label>
+            <input class="input mono" id="s-max_redirects" type="number" min="0" max="10" value="{{ settings.max_redirects }}"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="s-indexer_concurrency">Queue concurrency (1–5)</label>
+            <input class="input mono" id="s-indexer_concurrency" type="number" min="1" max="5" value="{{ settings.indexer_concurrency }}"></div>
+          <div class="field"><label for="s-max_retries">Retry attempts</label>
+            <input class="input mono" id="s-max_retries" type="number" min="0" max="10" value="{{ settings.max_retries }}"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h3>Features &amp; integrations</h3></div></div>
+      <div class="card-body">
+        <label class="checkbox-row mb-8"><input type="checkbox" id="s-sitemap_enabled" {{ 'checked' if settings.sitemap_enabled }}> Sitemap enabled</label>
+        <label class="checkbox-row mb-8"><input type="checkbox" id="s-rss_enabled" {{ 'checked' if settings.rss_enabled }}> RSS feed enabled</label>
+        <label class="checkbox-row mb-8"><input type="checkbox" id="s-observation_enabled" {{ 'checked' if settings.observation_enabled }}> Search visibility observation (non-authoritative)</label>
+        <label class="checkbox-row mb-8"><input type="checkbox" id="s-google_search_console_enabled" {{ 'checked' if settings.google_search_console_enabled }}> Google Search Console integration</label>
+        <label class="checkbox-row mb-8"><input type="checkbox" id="s-bing_webmaster_enabled" {{ 'checked' if settings.bing_webmaster_enabled }}> Bing Webmaster integration</label>
+      </div>
+    </div>
+
+    <div class="flex">
+      <button class="btn btn-primary" id="settings-save" type="button">Save settings</button>
+      <span class="small faint" id="settings-status"></span>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <div class="card-head"><div><h3>Configuration source</h3></div></div>
+      <div class="card-body small" style="color:var(--muted)">
+        <p style="margin-bottom:8px">Values here are runtime overrides stored in the Feather <span class="mono">settings</span> table. Environment variables from <span class="mono">.env</span> remain the source of truth for secrets (<span class="mono">SESSION_SECRET</span>, API keys, service accounts) and are never stored in the database or shown here.</p>
+        <p style="margin:0">In production, unsafe defaults (e.g. placeholder <span class="mono">SESSION_SECRET</span>) block startup.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const KEYS = ["app_name","public_base_url","session_lifetime_hours","polling_interval_ms","max_pdf_size_mb","http_timeout","max_redirects","indexer_concurrency","max_retries","sitemap_enabled","rss_enabled","observation_enabled","google_search_console_enabled","bing_webmaster_enabled"];
+  document.getElementById("settings-save").addEventListener("click", async () => {
+    const body = {};
+    KEYS.forEach(k => {
+      const el = document.getElementById("s-" + k);
+      if (!el) return;
+      body[k] = el.type === "checkbox" ? (el.checked ? "true" : "false") : el.value;
+    });
+    const status = document.getElementById("settings-status");
+    status.textContent = "Saving…";
+    try {
+      const r = await App.api("/api/settings", { method: "PUT", body });
+      if (Object.keys(r.errors).length) {
+        status.textContent = "Saved with errors: " + Object.entries(r.errors).map(([k, v]) => `${k}: ${v}`).join(", ");
+        App.toast("Partial save", status.textContent, "warn");
+      } else {
+        status.textContent = "Saved " + new Date().toLocaleTimeString();
+        App.toast("Settings saved", Object.keys(r.saved).length + " value(s) updated.", "success");
+      }
+    } catch (e) {
+      status.textContent = "";
+      App.toast("Save failed", e.message, "error");
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>403 — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card" style="text-align:center">
+      <div class="brand-logo" style="margin:0 auto 16px">403</div>
+      <h1 style="font-size:22px;margin-bottom:8px">Access denied</h1>
+      <p class="muted small" style="margin-bottom:20px">{{ message or "You do not have permission to view this page." }}</p>
+      <a class="btn btn-primary" href="/dashboard">Go to dashboard</a>
+    </div>
+  </div>
+</body>
+</html>

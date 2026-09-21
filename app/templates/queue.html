@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% set title = "Processing Queue" %}
+{% set subtitle = "Background jobs with retry + exponential backoff" %}
+{% set nav = "queue" %}
+{% block content %}
+<div class="kpi-grid" id="queue-kpis">
+  <div class="kpi skeleton"><div class="kpi-top"><span class="kpi-label">Pending</span></div><div class="kpi-value">0</div></div>
+  <div class="kpi skeleton"><div class="kpi-top"><span class="kpi-label">Running</span></div><div class="kpi-value">0</div></div>
+  <div class="kpi skeleton"><div class="kpi-top"><span class="kpi-label">Retry waiting</span></div><div class="kpi-value">0</div></div>
+  <div class="kpi skeleton"><div class="kpi-top"><span class="kpi-label">Completed</span></div><div class="kpi-value">0</div></div>
+  <div class="kpi skeleton"><div class="kpi-top"><span class="kpi-label">Failed</span></div><div class="kpi-value">0</div></div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <div><h3>Jobs</h3><div class="sub" id="queue-sub">concurrency —</div></div>
+    <div class="actions"><span class="small faint">auto-refresh 5s</span></div>
+  </div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr>
+          <th>Job</th><th>Type</th><th>PDF</th><th>Status</th><th>Attempts</th><th>Priority</th><th>Created</th><th>Completed</th><th>Error</th>
+          {% if current_user and current_user.role == 'ADMIN' %}<th class="right">Actions</th>{% endif %}
+        </tr></thead>
+        <tbody id="jobs-tbody">
+          <tr><td colspan="9" class="skeleton" style="padding:14px">&nbsp;</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="jobs-empty" style="display:none">
+      <div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg></div>
+      <h4>Queue is empty</h4>
+      <p>Submit a PDF URL and its processing jobs will appear here with live status, attempts and errors.</p>
+      <a class="btn btn-primary" href="/submit">Submit a PDF URL</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const isAdmin = {{ 'true' if current_user and current_user.role == 'ADMIN' else 'false' }};
+  async function load() {
+    try {
+      const [jobs, stats] = await Promise.all([
+        App.api("/api/queue"),
+        App.api("/api/queue/stats"),
+      ]);
+      const kpis = document.getElementById("queue-kpis");
+      kpis.innerHTML = [
+        ["pending", "Pending", "k-processing"],
+        ["running", "Running", "k-total"],
+        ["retrying", "Retry waiting", "k-discovery"],
+        ["completed", "Completed", "k-valid"],
+        ["failed", "Failed", "k-invalid"],
+      ].map(([k, l, c]) => `<div class="kpi ${c}"><div class="kpi-top"><span class="kpi-label">${l}</span></div><div class="kpi-value">${stats[k] || 0}</div></div>`).join("");
+      document.getElementById("queue-sub").textContent = `concurrency ${stats.concurrency} · ${stats.total} total jobs`;
+      const tbody = document.getElementById("jobs-tbody");
+      const empty = document.getElementById("jobs-empty");
+      if (!jobs.jobs.length) { tbody.innerHTML = ""; empty.style.display = "block"; return; }
+      empty.style.display = "none";
+      tbody.innerHTML = jobs.jobs.map(j => `
+        <tr>
+          <td class="mono">#${j.id}</td>
+          <td>${App.pill(j.job_type)}</td>
+          <td class="mono">${j.pdf_id ? "PDF #" + j.pdf_id : "—"}</td>
+          <td>${App.pill(j.status)}</td>
+          <td class="mono">${j.attempts}/${j.max_attempts}</td>
+          <td class="mono">${j.priority}</td>
+          <td class="cell-sub">${App.timeAgo(j.created_at)}</td>
+          <td class="cell-sub">${j.completed_at ? App.timeAgo(j.completed_at) : "—"}</td>
+          <td class="cell-sub" title="${App.esc(j.error || "")}">${App.esc((j.error || "").slice(0, 60)) || "—"}</td>
+          ${isAdmin ? `<td class="right">${j.status === "PENDING" ? `<button class="btn btn-sm btn-ghost" data-cancel="${j.id}" style="color:var(--red)">Cancel</button>` : ""}</td>` : ""}
+        </tr>`).join("");
+      tbody.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", async () => {
+        try {
+          await App.api(`/api/queue/${b.dataset.cancel}/cancel`, { method: "POST" });
+          App.toast("Job cancelled", "", "success");
+          load();
+        } catch (e) { App.toast("Cancel failed", e.message, "error"); }
+      }));
+    } catch (e) { /* transient */ }
+  }
+  load();
+  setInterval(load, 5000);
+})();
+</script>
+{% endblock %}

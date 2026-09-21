@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — {{ app_name }}</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%236366f1'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E%3E%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/responsive.css">
+  <script>
+    try { var t = localStorage.getItem("bi-theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-logo">BI</div>
+        <div class="stack">
+          <div class="brand-name">{{ app_name }}</div>
+          <div class="brand-sub">PDF Discovery &amp; Monitoring</div>
+        </div>
+      </div>
+      <div class="login-error" id="login-error"></div>
+      <form id="login-form">
+        <div class="field">
+          <label for="email">Email</label>
+          <input class="input" id="email" name="email" type="email" autocomplete="username" required placeholder="admin@example.com">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input class="input" id="password" name="password" type="password" autocomplete="current-password" required placeholder="Your password">
+        </div>
+        <button class="btn btn-primary" id="login-btn" type="submit" style="width:100%;padding:11px">
+          Sign in
+        </button>
+      </form>
+      <p class="small faint" style="text-align:center;margin-top:18px">
+        Secure session · Argon2 password hashing · CSRF protected
+      </p>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    (function () {
+      const next = new URLSearchParams(location.search).get("next");
+      const target = next && next.startsWith("/") ? next : "/dashboard";
+      const form = document.getElementById("login-form");
+
+      // Cookie-less resume: in contexts where the browser blocks third-party
+      // cookies, a previous login may have stored the session token in
+      // localStorage — verify it and re-enter the app with a one-time
+      // handoff token.
+      async function gateway() {
+        if (!App.sessionToken()) return;
+        try {
+          await App.api("/api/auth/me"); // clears the token itself on 401
+        } catch (e) {
+          return; // stale token → show the login form
+        }
+        await App.gotoWithSession(target);
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById("login-btn");
+        const errEl = document.getElementById("login-error");
+        errEl.style.display = "none";
+        btn.disabled = true;
+        btn.textContent = "Signing in…";
+        try {
+          const data = await App.api("/api/auth/login", {
+            method: "POST",
+            body: {
+              email: document.getElementById("email").value,
+              password: document.getElementById("password").value,
+            },
+          });
+          App.setSession(data && data.token);
+          await App.gotoWithSession(target);
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.style.display = "block";
+          btn.disabled = false;
+          btn.textContent = "Sign in";
+        }
+      });
+
+      gateway();
+    })();
+  </script>
+</body>
+</html>

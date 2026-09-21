@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set title = "Users" %}
+{% set subtitle = "Create, edit, disable, reset and delete accounts" %}
+{% set nav = "users" %}
+{% block content %}
+<div class="card">
+  <div class="card-head">
+    <div><h3>Team</h3><div class="sub">passwords are Argon2-hashed; hashes are never shown</div></div>
+    <div class="actions">
+      <button class="btn btn-primary" id="user-create-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Create User
+      </button>
+    </div>
+  </div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr>
+          <th>Name / Email</th><th>Role</th><th>Status</th><th>Created</th><th>Last Login</th><th class="right">Actions</th>
+        </tr></thead>
+        <tbody id="users-tbody">
+          <tr><td colspan="6" class="skeleton" style="padding:14px">&nbsp;</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="users-empty" style="display:none">
+      <div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+      <h4>No users yet</h4>
+      <p>Create the first user with the button above.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/users.js"></script>
+{% endblock %}

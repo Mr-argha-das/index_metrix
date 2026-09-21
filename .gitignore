@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Environment & secrets
+.env
+*.pem
+*.key
+
+# Feather database files (per-machine data, never commit)
+data/
+!data/.gitkeep
+!data/backups/
+data/backups/*
+!data/backups/.gitkeep
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

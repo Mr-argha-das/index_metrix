@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% set title = "Submit PDF" %}
+{% set subtitle = "Add third-party PDF URLs for validation and publishing" %}
+{% set nav = "submit" %}
+{% block content %}
+<div class="dash-grid">
+  <div class="col">
+    <div class="card">
+      <div class="card-head">
+        <div><h3>Paste PDF URLs</h3><div class="sub">one URL per line, or comma separated</div></div>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <textarea class="input mono" id="submit-text" rows="10" placeholder="https://example.com/file1.pdf&#10;https://example.com/file2.pdf&#10;https://example.com/file3.pdf"></textarea>
+          <span class="hint">Only <span class="mono">http://</span> and <span class="mono">https://</span> are accepted. Private, loopback and internal addresses are rejected by the SSRF guard.</span>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>or upload a .txt / .csv with URLs</label>
+            <input class="input" id="submit-file" type="file" accept=".txt,.csv">
+          </div>
+          <div class="field" style="justify-content:flex-end">
+            <button class="btn btn-primary" id="submit-btn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>
+              Submit URLs
+            </button>
+          </div>
+        </div>
+        <div id="submit-results" class="mt-8"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <div class="card-head"><div><h3>What happens next</h3></div></div>
+      <div class="card-body small" style="color:var(--muted)">
+        <div class="timeline">
+          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">RECEIVED</div><div class="tl-msg">URL recorded and queued (dedupe by normalized-URL hash).</div></div>
+          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">VALIDATED</div><div class="tl-msg">Scheme, host, DNS and private-IP checks (SSRF protection, every redirect).</div></div>
+          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">PDF CHECKED</div><div class="tl-msg">Content-Type + <span class="mono">%PDF-</span> signature; never trust headers alone.</div></div>
+          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">ANALYZED</div><div class="tl-msg">PyMuPDF extracts pages, metadata, SHA-256, text preview.</div></div>
+          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">PAGE PUBLISHED</div><div class="tl-msg">A useful dedicated page on our site, with a normal link to the original PDF.</div></div>
+          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">DISCOVERY PENDING</div><div class="tl-msg">Page added to sitemap.xml + rss.xml; search engines may discover it — not guaranteed.</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div><h3>Sample</h3></div></div>
+      <div class="card-body">
+        <div class="code-block">http://www.egr.msu.edu/decs/sites/default/files/webform/poster_print_request/_sid_/nainaxcvv-renew-2.pdf</div>
+        <p class="small faint mt-8">Paste any reachable third-party PDF. The sample above is external and may disappear — the app handles failures gracefully.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const btn = document.getElementById("submit-btn");
+  const out = document.getElementById("submit-results");
+  async function submit() {
+    const file = document.getElementById("submit-file").files[0];
+    const text = document.getElementById("submit-text").value;
+    btn.disabled = true;
+    out.innerHTML = '<span class="small faint">Submitting…</span>';
+    try {
+      let result;
+      if (file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        result = await App.api("/api/pdfs/file", { method: "POST", body: fd });
+      } else if (text.trim()) {
+        const urls = text.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean);
+        result = await App.api("/api/pdfs/bulk", { method: "POST", body: { urls } });
+      } else {
+        out.innerHTML = '<div class="login-error" style="display:block">Paste at least one URL or choose a file.</div>';
+        btn.disabled = false;
+        return;
+      }
+      const parts = [];
+      parts.push(`<div class="pill green mb-8"><span class="dot"></span>${result.accepted.length} accepted</div>`);
+      if (result.duplicates.length) parts.push(`<div class="pill slate mb-8"><span class="dot"></span>${result.duplicates.length} duplicate(s) skipped</div>`);
+      if (result.invalid.length) {
+        parts.push(`<div class="pill red mb-8"><span class="dot"></span>${result.invalid.length} invalid</div>`);
+        parts.push('<ul class="small" style="color:var(--muted);margin:8px 0 0 18px">' + result.invalid.map(i => `<li><span class="mono">${App.esc(i.url)}</span> — ${App.esc(i.reason)}</li>`).join("") + "</ul>");
+      }
+      if (result.accepted.length) {
+        parts.push('<div class="small mt-8"><a href="/urls">View them on the URLs page →</a></div>');
+      }
+      out.innerHTML = parts.join("");
+      App.toast("Submission complete", `${result.accepted.length} accepted, ${result.duplicates.length} duplicates, ${result.invalid.length} invalid`, result.invalid.length ? "warn" : "success");
+      document.getElementById("submit-text").value = "";
+      document.getElementById("submit-file").value = "";
+    } catch (e) {
+      out.innerHTML = `<div class="login-error" style="display:block">${App.esc(e.message)}</div>`;
+      App.toast("Submission failed", e.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  btn.addEventListener("click", submit);
+})();
+</script>
+{% endblock %}

@@ -38,7 +38,7 @@ class Repository:
     async def all(self, limit: int | None = None, order: str = "id") -> list[dict]:
         async with self.db.lock:
             df = self.store.df.copy()
-        if len(df) and order in df.columns:
+        if len(df) and order.lstrip("-") in df.columns:
             ascending = not order.startswith("-")
             key = order.lstrip("-")
             df = df.sort_values(key, ascending=ascending)
@@ -96,6 +96,22 @@ class Repository:
                     )
             self.store.save(new_df, backup=False)
             return jsonable(row | {"id": row.get("id")})
+
+    async def insert_many(self, rows: list[dict]) -> list[dict]:
+        """One atomic table write for bulk intake rather than N rewrites."""
+        if not rows:
+            return []
+        async with self.db.lock:
+            df = self.store.df.copy()
+            first = int(df["id"].max()) + 1 if len(df) else 1
+            rows = [{**{k: v for k, v in row.items() if k in self.store.schema}, "id": first + i}
+                    for i, row in enumerate(rows)]
+            new_df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
+            for col, kind in self.store.schema.items():
+                if kind == "int":
+                    new_df[col] = pd.to_numeric(new_df[col], errors="coerce").astype("Int64")
+            self.store.save(new_df, backup=False)
+            return [jsonable(row) for row in rows]
 
     async def update(self, row_id: int, **fields: Any) -> dict | None:
         result: dict | None = None

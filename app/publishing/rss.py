@@ -6,7 +6,12 @@ bumped without an actual change.
 from __future__ import annotations
 
 from email.utils import formatdate
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape as _escape
+
+
+def escape(value: str) -> str:
+    # PDF metadata may contain control characters forbidden by XML 1.0.
+    return _escape("".join(c for c in value if c in "\t\n\r" or 0x20 <= ord(c) <= 0xD7FF or 0xE000 <= ord(c) <= 0xFFFD or 0x10000 <= ord(c) <= 0x10FFFF), {'"': "&quot;"})
 
 from ..utils import parse_iso, truncate
 
@@ -14,7 +19,7 @@ from ..utils import parse_iso, truncate
 def _pubdate(iso: str | None) -> str:
     dt = parse_iso(iso)
     if dt is None:
-        return formatdate(usegmt=True)
+        return ""
     return formatdate(timeval=dt.timestamp(), usegmt=True)
 
 
@@ -25,9 +30,12 @@ def render_rss(pages: list[dict], settings, limit: int | None = None) -> str:
     )[:limit]
 
     base = settings.public_base_url
-    now = _pubdate(None)
+    last_build = max((p.get("updated_at") or p.get("published_at") or "" for p in pages), default="")
+    build_tag = f"    <lastBuildDate>{_pubdate(last_build)}</lastBuildDate>\n" if _pubdate(last_build) else ""
     items = []
     for p in pages:
+        if not _pubdate(p.get("published_at")):
+            continue  # no fabricated publication dates
         # Keep every feed entry canonical when the public domain changes.
         link = f"{base.rstrip('/')}/pdf/{p.get('slug')}"
         guid = link
@@ -50,7 +58,7 @@ def render_rss(pages: list[dict], settings, limit: int | None = None) -> str:
         f"    <atom:link href=\"{escape(base + '/rss.xml')}\" rel=\"self\" type=\"application/rss+xml\"/>\n"
         f"    <description>RSS feed of dedicated pages for validated PDF documents, published on {escape(settings.app_name)}.</description>\n"
         f"    <language>en</language>\n"
-        f"    <lastBuildDate>{now}</lastBuildDate>\n"
-        "\n".join(items)
+        f"{build_tag}"
+        + "\n".join(items)
         + "\n  </channel>\n</rss>\n"
     )

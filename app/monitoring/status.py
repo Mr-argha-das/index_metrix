@@ -2,17 +2,17 @@
 
 The single most important rule in the application:
 
-    **Index/crawl status only changes when legitimate, authorized evidence
+    **Index/crawl status only changes when legitimate, independent evidence
     exists — and the UI must always show where that evidence came from.**
 
 * Our server fetching a URL  → technical probe (NEVER "Google crawl")
 * Our page in sitemap/RSS    → discovery pending (NEVER "indexed")
 * Search result observation  → OBSERVED / NOT_OBSERVED (NEVER "indexed")
-* Authorized Search Console data for OUR property → the only source that can
+* Authorized Search Console data for OUR property → an automated source that can
   set INDEXED / NOT_INDEXED for our pages, with the check timestamp and the
   exact API values stored as evidence.
 
-Third-party PDFs can never be indexed by us; for their *own* domains we have
+Third-party PDFs may independently be indexed, but we cannot cause or infer it; for their *own* domains we have
 no authorized property, so their status is NOT_AUTHORIZED / UNKNOWN and the
 reason is recorded.
 """
@@ -37,8 +37,8 @@ log = logging.getLogger("bot_indexer.monitoring")
 # index status. Only these states are authoritative.
 _GSC_INDEXED_STATES = {
     "Submitted / Indexed",
-    "Published",
-    "IndexingRequested",
+    "Submitted and indexed",
+    "Indexed, not submitted in sitemap",
 }
 _GSC_NOT_INDEXED_STATES = {
     "Submitted / Crawled - currently not indexed",
@@ -63,11 +63,11 @@ def classify_gsc_index_state(inspection: dict) -> tuple[str, dict]:
     raw API values so the UI can display exactly what the API said.
     """
     result = (inspection or {}).get("inspectionResult") or {}
-    index_state = result.get("indexStateResult") or {}
-    coverage = (index_state.get("coverage") or {}).get("coverageState") or ""
+    index_state = result.get("indexStatusResult") or result.get("indexStateResult") or {}
+    coverage = index_state.get("coverageState") or (index_state.get("coverage") or {}).get("coverageState") or ""
     robots = index_state.get("robotsTxtState") or ""
     last_crawl = index_state.get("lastCrawlTime") or ""
-    canonical = result.get("canonical") or None
+    canonical = index_state.get("googleCanonical") or None
     verdict = index_state.get("verdict") or None
 
     evidence = {
@@ -81,7 +81,7 @@ def classify_gsc_index_state(inspection: dict) -> tuple[str, dict]:
         "checked_at": utcnow_iso(),
     }
 
-    if coverage in _GSC_INDEXED_STATES:
+    if verdict == "PASS" or (not verdict and coverage in _GSC_INDEXED_STATES):
         return IS_INDEXED, evidence
     if coverage in _GSC_NOT_INDEXED_STATES:
         return IS_NOT_INDEXED, evidence
@@ -97,18 +97,24 @@ def crawl_status_from_gsc(evidence: dict) -> str:
 async def apply_gsc_evidence(repos: Repos, pdf_id: int, inspection: dict) -> dict:
     """Persist Search Console evidence on our own page's PDF record."""
     status, evidence = classify_gsc_index_state(inspection)
+    pages = await repos.pages.find(lambda p: p.get("pdf_id") == pdf_id)
+    evidence["target"] = "reference-page"
+    evidence["url"] = pages[0]["page_url"] if pages else None
     crawl = crawl_status_from_gsc(evidence)
     prev = await repos.pdfs.get(pdf_id)
     prev_status = (prev or {}).get("index_status") or IS_UNKNOWN
 
     await repos.pdfs.update(
         pdf_id,
+        discovery_status="DISCOVERED" if status == IS_INDEXED or evidence.get("last_crawl_time") else ((prev or {}).get("discovery_status") or "NOT_SUBMITTED"),
         index_status=status,
         index_evidence=json_dumps(evidence),
-        crawl_status=crawl,
+        crawl_status=crawl if crawl != CS_UNKNOWN else ((prev or {}).get("crawl_status") or CS_UNKNOWN),
         crawl_evidence=json_dumps(
             {
                 "source": "Google Search Console",
+                "url": evidence["url"],
+                "target": "reference-page",
                 "status": crawl,
                 "last_crawl_time": evidence.get("last_crawl_time"),
                 "checked_at": utcnow_iso(),

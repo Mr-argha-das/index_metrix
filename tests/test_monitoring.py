@@ -65,8 +65,8 @@ class TestTechnicalProbe:
             lambda d: any(e["event_type"] == "TECHNICAL_PROBE" and e["status"] == "SUCCESS" for e in d["item"]["events"]),
             timeout=20,
         )
-        # crawl status must remain CRAWL_UNKNOWN after a technical probe
-        assert detail["item"]["crawl_status"] == "CRAWL_UNKNOWN"
+        # A server fetch is FETCH_CHECKED, never search-engine crawl evidence
+        assert detail["item"]["crawl_status"] == "FETCH_CHECKED"
         # index stays UNKNOWN with an explanation
         assert detail["item"]["index_status"] == "INDEX_UNKNOWN"
         assert detail["item"]["third_party_note"]["reason"]
@@ -140,7 +140,7 @@ class TestGscEvidence:
         assert ev["coverage_state"] == "Submitted / Indexed"
         assert ev["checked_at"]
         # crawl evidence from lastCrawlTime
-        assert detail["item"]["crawl_status"] == "CRAWL_CHECKED"
+        assert detail["item"]["crawl_status"] == "SEARCH_ENGINE_CRAWL_EVIDENCE"
 
     def test_gsc_not_indexed(self, client, pdf_server_url):
         admin_client(client)
@@ -185,7 +185,7 @@ class TestStatusClassification:
             }
 
         assert classify_gsc_index_state(insp("Submitted / Indexed"))[0] == "INDEXED"
-        assert classify_gsc_index_state(insp("Published"))[0] == "INDEXED"
+        assert classify_gsc_index_state(insp("Published"))[0] == "INDEX_UNKNOWN"
         assert classify_gsc_index_state(insp("Crawled - currently not indexed"))[0] == "NOT_INDEXED"
         assert classify_gsc_index_state(insp("Excluded / Blocked by robots.txt"))[0] == "NOT_INDEXED"
         assert classify_gsc_index_state(insp("Pending"))[0] == "INDEX_UNKNOWN"

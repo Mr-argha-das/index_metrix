@@ -30,6 +30,7 @@ os.environ.update(
         # the whole suite fetches from one local host — lift the per-host
         # outbound rate limit (it still applies in production defaults)
         "FETCH_RATE_PER_MINUTE": "1000",
+        "FETCH_HOST_DELAY_SECONDS": "0",
         "FETCH_CONCURRENCY_PER_HOST": "5",
         "GOOGLE_SEARCH_CONSOLE_ENABLED": "false",
         "BING_WEBMASTER_ENABLED": "false",

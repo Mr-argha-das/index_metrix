@@ -15,7 +15,7 @@ from .feather_store import Database, DatabaseCorruptedError, TABLE_SCHEMAS
 
 log = logging.getLogger("bot_indexer.migrations")
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 
 def describe_schemas() -> dict[str, dict[str, str]]:
@@ -51,3 +51,42 @@ def backup_all(db: Database) -> list[str]:
         if p:
             paths.append(str(p))
     return paths
+
+
+async def repair_status_semantics(repos) -> None:
+    """Backfill independent states, preserving existing published slugs/content.
+
+    In particular, old 'Published'/'IndexingRequested' coverage strings are
+    not indexing evidence. Keep the old evidence in the audit event.
+    """
+    from ..monitoring.status import classify_gsc_index_state
+    from ..utils import json_dumps, json_loads
+
+    pages = {p["pdf_id"]: p for p in await repos.pages.all()}
+    for pdf in await repos.pdfs.all():
+        changes = {}
+        page = pages.get(pdf["id"])
+        if not pdf.get("submission_status"):
+            changes["submission_status"] = "DISCOVERY_SUBMITTED" if page else (
+                "VALIDATION_FAILED" if pdf.get("status") in ("INVALID", "PDF_INVALID", "FAILED", "PDF_ANALYSIS_FAILED") else "RECEIVED")
+        if not page and pdf.get("discovery_status") == "DISCOVERY_PENDING":
+            changes["discovery_status"] = "NOT_SUBMITTED"
+        if page and not pdf.get("discovery_channels"):
+            changes["discovery_channels"] = json_dumps(["reference-page"] +
+                (["sitemap"] if page.get("sitemap_included") else []) +
+                (["rss"] if page.get("rss_included") else []))
+        proof = json_loads(pdf.get("index_evidence"), {}) or {}
+        if pdf.get("index_status") == "INDEXED" and proof.get("source") != "operator-confirmed":
+            verdict, _ = classify_gsc_index_state({"inspectionResult": {"indexStatusResult": {
+                "coverageState": proof.get("coverage_state"), "verdict": proof.get("verdict")}}})
+            if verdict != "INDEXED" or proof.get("source") != "Google Search Console":
+                changes["index_status"] = "INDEX_UNKNOWN"
+                await repos.events.add("INDEX_EVIDENCE_CORRECTED", "Legacy status lacked independent indexing evidence; reset to UNKNOWN.",
+                                       pdf_id=pdf["id"], metadata={"previousEvidence": proof})
+        crawl = json_loads(pdf.get("crawl_evidence"), {}) or {}
+        if pdf.get("crawl_status") == "CRAWL_CHECKED":
+            changes["crawl_status"] = "SEARCH_ENGINE_CRAWL_EVIDENCE" if crawl.get("source") == "Google Search Console" and crawl.get("last_crawl_time") else "CRAWL_UNKNOWN"
+        if pdf.get("crawl_status") == "CRAWL_UNKNOWN" and pdf.get("http_status"):
+            changes["crawl_status"] = "FETCH_CHECKED"
+        if changes:
+            await repos.pdfs.update(pdf["id"], **changes)

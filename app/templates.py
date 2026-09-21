@@ -22,6 +22,8 @@ _PILL_COLORS = {
     "RECEIVED": "blue", "VALIDATING": "amber", "PDF_ANALYZING": "amber", "PAGE_GENERATING": "amber",
     "INVALID": "red", "PDF_INVALID": "red", "PDF_ANALYSIS_FAILED": "red", "FAILED": "red",
     "PAGE_FAILED": "red", "DISCOVERY_PENDING": "cyan", "DISCOVERY_SUBMITTED": "violet",
+    "FETCH_CHECKED": "blue", "SEARCH_ENGINE_CRAWL_EVIDENCE": "violet",
+    "DONE": "green", "DISCOVERED": "green",
     "CRAWL_UNKNOWN": "slate", "CRAWL_OBSERVED": "blue", "CRAWL_CHECKED": "violet",
     "INDEX_UNKNOWN": "slate", "INDEXED": "green", "NOT_INDEXED": "red",
     "SCANNED_OR_EMPTY_PDF": "amber", "ERROR": "red",
@@ -62,8 +64,10 @@ def _security_headers(request: Request) -> dict:
     headers = {
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "X-Frame-Options": "DENY",
+
     }
+    if not request.url.hostname or not request.url.hostname.endswith(".e2b.app"):
+        headers["X-Frame-Options"] = "DENY"
     if settings.secure_cookies:
         headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return headers

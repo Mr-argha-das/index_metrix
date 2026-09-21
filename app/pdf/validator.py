@@ -78,7 +78,7 @@ def normalize_url(raw: str) -> str:
         raise URLValidationError("URL is empty.")
     if len(url) > 2048:
         raise URLValidationError("URL is too long (max 2048 characters).")
-    if "\r" in url or "\n" in url or "\t" in url:
+    if any(ord(c) < 32 or ord(c) == 127 for c in url):
         raise URLValidationError("URL contains illegal control characters.")
     if " " in url:
         # tolerate a single pasted "title <url>" style entry
@@ -94,10 +94,16 @@ def normalize_url(raw: str) -> str:
             f"Only http:// and https:// URLs are supported (got: '{url[:40]}...'). "
             "javascript:, file:, data: and other schemes are rejected."
         )
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError as exc:
+        raise URLValidationError("Malformed host or port.") from exc
+    if parts.username is not None or parts.password is not None:
+        raise URLValidationError("URLs containing credentials are not supported.")
     if parts.scheme.lower() not in ALLOWED_SCHEMES:
         raise URLValidationError("Only http and https schemes are allowed.")
-    host = (parts.hostname or "").lower()
+    host = (parts.hostname or "").lower().rstrip(".")
     if not host:
         raise URLValidationError("URL has no host.")
     # rebuild without fragment, with explicit port when non-default
@@ -105,7 +111,7 @@ def normalize_url(raw: str) -> str:
     host_netloc = f"[{host}]" if ":" in host else host
     port = parts.port
     netloc = host_netloc
-    if port and port not in (80, 443):
+    if port is not None and port != (443 if parts.scheme.lower() == "https" else 80):
         netloc = f"{host_netloc}:{port}"
     normalized = urlunsplit(
         (parts.scheme.lower(), netloc, parts.path or "/", parts.query, "")

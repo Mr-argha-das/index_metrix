@@ -1,8 +1,8 @@
-# BOT INDEXER
+# INDEX MATRIX
 
-**Production-ready FastAPI platform for third-party PDF URL validation, publishing, discovery and monitoring.**
+**FastAPI platform for third-party PDF URL validation, publishing, discovery and monitoring.**
 
-You submit external PDF URLs. BOT INDEXER fetches them safely (SSRF-protected), validates and analyzes the PDF, publishes a useful SEO-complete dedicated page **on our own site** (with a clear link to the original file), exposes the pages through `sitemap.xml` + `rss.xml` so search engines can discover them, and honestly tracks discovery/crawl/index states — never claiming indexing without authoritative evidence.
+You submit external PDF URLs. INDEX MATRIX fetches them safely (SSRF-protected), validates and analyzes the PDF, publishes a useful SEO-complete dedicated page **on our own site** (with a clear link to the original file), exposes the pages through `sitemap.xml` + `rss.xml` so search engines can discover them, and honestly tracks discovery/crawl/index states — never claiming indexing without authoritative evidence.
 
 ---
 
@@ -13,7 +13,7 @@ You submit external PDF URLs. BOT INDEXER fetches them safely (SSRF-protected), 
 | **Validation** | http/https only; scheme, host and IP checks; **SSRF protection on every redirect hop** (localhost, private, loopback, link-local, metadata `169.254.169.254`, internal name blocks); DNS-rebinding defence (pinned resolver); max 5 redirects; 10 s connect / 30 s read timeouts; 35 MB cap |
 | **Fetch** | Honest user agent `BOT-INDEXER/1.0` — our fetch is a *technical fetch*, never labelled as a Googlebot crawl |
 | **Analysis** | `%PDF-` magic-byte signature check (HTML masquerading as PDF is rejected), PyMuPDF structure/metadata extraction (title, author, pages, text), SHA-256 fingerprint, TEXT_PDF vs SCANNED_OR_EMPTY_PDF classification |
-| **Publishing** | One dedicated page per valid PDF at `/pdf/<slug>` — metadata, first-page preview excerpt, canonical URL, Open Graph, **valid JSON-LD** (schema.org `WebPage`/`DigitalDocument`), and a plain-HTML “View Original PDF” link (`rel="noopener nofollow"`, no JS). The file is **not re-hosted** — we never copy the document, we link to it |
+| **Publishing** | One dedicated page per valid PDF at `/pdf/<slug>` — metadata, first-page preview excerpt, canonical URL, Open Graph, **valid JSON-LD** (schema.org `WebPage`/`DigitalDocument`), and a plain-HTML “View Original PDF” link (`rel="noopener"`, no JS). The file is **not re-hosted** — we never copy the document, we link to it |
 | **Discovery** | `sitemap.xml` (our pages only, real `lastmod`, never third-party URLs), `rss.xml` (real `pubDate`), `robots.txt` declaring the sitemap |
 | **Queue** | In-process async queue, concurrency ≤ 5, 3 retries with exponential backoff (5 s × 2ⁿ, capped 300 s), crash recovery on restart |
 | **Monitoring** | **Technical Server Probe** (explicitly labelled “NOT evidence of any Google crawl”), Search Console URL Inspection for *authorized properties only*; index status changes **only** with recorded authoritative evidence |
@@ -22,8 +22,8 @@ You submit external PDF URLs. BOT INDEXER fetches them safely (SSRF-protected), 
 ### Honest status model
 
 - `discovery_status`: `DISCOVERY_PENDING` until an authorized property confirms discovery — we cannot force or verify discovery for third-party domains.
-- `crawl_status`: stays `CRAWL_UNKNOWN` unless an authorized Search Console property reports a crawl. **Our own probe never sets crawl status.**
-- `index_status`: `INDEXED` / `NOT_INDEXED` **only** from authorized Search Console evidence (with `index_evidence` JSON: source, coverage state, checked-at). Third-party domains: `INDEX_UNKNOWN` with an explicit reason. The “Indexed” KPI counts only records with valid evidence.
+- `crawl_status`: ordinary HTTP checks produce `FETCH_CHECKED`, **not** search-engine evidence. Authorized Search Console crawl timestamps can produce `SEARCH_ENGINE_CRAWL_EVIDENCE` for the reference page.
+- `index_status`: `INDEXED` / `NOT_INDEXED` **only** from authorized Search Console evidence or audited admin operator attestations (with `index_evidence` JSON: source, coverage state, checked-at). Third-party domains: `INDEX_UNKNOWN` with an explicit reason. The “Indexed” KPI counts only records with valid evidence.
 - We never spoof Googlebot, never label our fetches as Google crawls, and never use the Google Indexing API to submit generic PDFs.
 
 ---
@@ -58,7 +58,7 @@ On first startup an admin account is created from `ADMIN_EMAIL` / `ADMIN_PASSWOR
 
 ### Development without production settings
 
-The bundled `.env` sets `APP_ENV=development` and `ALLOW_PRIVATE_TARGETS=true` so you can point the app at a local PDF server:
+For local fixtures only, explicitly set `APP_ENV=development` and `ALLOW_PRIVATE_TARGETS=true`. Neither a `.env` nor production credentials are bundled:
 
 ```bash
 .venv/bin/python scripts/dev_pdf_server.py --port 8899
@@ -93,7 +93,7 @@ When unconfigured, every integration surface reports **NOT CONFIGURED** — no f
 .venv/bin/python -m pytest tests/ -v
 ```
 
-139 tests, all passing:
+The current full suite passes **195 tests** (2026-09-21). See [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for exact verification commands, limitations, and production results.
 
 | File | Covers |
 |---|---|
@@ -103,7 +103,7 @@ When unconfigured, every integration surface reports **NOT CONFIGURED** — no f
 | `test_users.py` | creation validation (email/password/role/duplicates), disable/enable, password reset invalidates sessions, self-protection, last-admin guard |
 | `test_pipeline.py` | end-to-end publish + metadata, duplicate detection, same-content flagging, 404/403/fake-HTML/timeout paths, retry endpoint, delete removes page + sitemap entry, user ownership |
 | `test_publishing.py` | sitemap (own pages only, disabled → 404, deletion removes), RSS (`pubDate`, `guid`), robots, public page without auth, stable unique slugs |
-| `test_monitoring.py` | probe honesty labels, probe-never-sets-crawl invariant, fake GSC client → INDEXED/NOT_INDEXED with evidence, ambiguous → UNKNOWN, not-configured → UNKNOWN |
+| `test_monitoring.py` | probe honesty labels, probe-never-sets-search-engine-crawl invariant, fake GSC client → INDEXED/NOT_INDEXED with evidence, ambiguous → UNKNOWN, not-configured → UNKNOWN |
 | `test_queue.py` | queue stats/list, per-user job visibility, cancel semantics, backoff schedule, retryable-500-then-success with a flaky server |
 | `test_system.py` | health, system status, log structure, settings whitelist + validation, integrations NOT CONFIGURED, JSON-LD quality, uploads |
 | `test_sample_url.py` | opt-in: external sample PDF from the spec (skips gracefully when offline) |
@@ -144,3 +144,78 @@ data/                  runtime Feather store (git-ignored) + data/backups/
 - **Cookie-less embedded contexts**: for browsers that block third-party cookies entirely (common in cross-site iframes), the login response also returns the session token; the UI keeps it in (partitioned) `localStorage`, sends it as `Authorization: Bearer` on API calls, and enters server-rendered pages through a one-time, 60-second handoff token (`?st=`, single use). Cross-site mutations remain blocked by CORS (no `Access-Control-Allow-*` headers) and by the fact that an attacker page cannot read the token. When a request carries no CSRF cookie at all (i.e. the context does not send cookies), the double-submit check is inapplicable and skipped; when the cookie is present it is enforced as before.
 - **Data**: no passwords or secrets in logs (scrubbing verified by tests), secrets never leave the server, production boot refused with placeholder `SESSION_SECRET`.
 - **Integrity**: corrupted Feather files raise `DatabaseCorruptedError` with recovery guidance — data is never silently dropped; backups are written before every destructive operation.
+
+
+## INDEX MATRIX API and deployment contract
+
+This is a **Python/FastAPI checkout**, not a Node application. There is no
+`package.json` or `server.js`. Keep the existing runtime; do not deploy it with
+`npm start`. The repository available for this session is `Mr-argha-das/index_metrix`.
+
+### Authenticated submission and status
+
+- `POST /api/index/validate` — `{ "urls": ["https://publisher.org/document.pdf"] }`;
+  returns **202** with accepted job IDs, normalized duplicates and malformed inputs.
+  Up to **10,000 URLs** per batch; DNS/HTTP happen only in persistent workers.
+- `GET /api/index/status` — paginated records and independent-state summary;
+  `page=1&per_page=100`, maximum page size 1,000.
+- `GET /api/index/status?url=<encoded-url>` or `/api/index/status/<encoded-url>` — one record.
+- `POST /api/index/evidence` — **admin only**, audited operator attestation:
+  `{ "url": "...", "indexed": true, "source": "operator-confirmed", "details": "Describe independent evidence..." }`.
+  A source PDF URL updates **sourceIndexStatus**; a reference-page URL updates
+  **indexStatus**. These resources must never be conflated. This endpoint trusts
+  the authenticated operator's attestation; it does not verify its truth automatically.
+- Existing `/api/pdfs`, analyzer/detail, retry/delete, users, queue and integrations remain.
+- API writes use the existing session/bearer authentication and CSRF protections.
+  API schema/docs are now admin-only. Public health and login are intentional exceptions.
+
+### Public discovery routes
+
+`GET` and `HEAD` work without authentication for `/pdf/{slug}`, `/sitemap.xml`,
+`/sitemap-{chunk}.xml`, `/rss.xml`, `/robots.txt`. Unknown IDs return 404.
+HEAD preserves the GET status/content type/content length but emits no body.
+Sitemap/RSS include **our reference pages**, never third-party URLs as sitemap entries.
+RSS is valid XML and uses real publication dates; unchanged reprocessing does not
+bump publication or sitemap timestamps. Existing slugs are preserved; new slugs use
+URL filenames plus a 12-character normalized-URL hash, independent of mutable titles.
+
+### Workers and safety
+
+Use **one Uvicorn process** with this Feather store. Do not use `--workers 2`
+or multiple replicas sharing the data directory: locks are in-process, not distributed.
+The async queue defaults to two workers (maximum five), one-second spacing per host,
+ten outbound requests/minute/host, three retries with persisted exponential-backoff
+deadlines, and restart recovery of pending/interrupted work. Jobs use `PENDING`,
+`RUNNING`, `RETRY_WAITING`, `DONE`, `FAILED`, `CANCELLED`; legacy `COMPLETED` rows
+remain readable. Bulk intake writes each table once, not once per URL.
+
+Remote download default: **35 MiB**. Robots policies are checked on every resource
+redirect origin via the SSRF-safe fetcher. Denials are respected; unavailable/challenge
+responses defer/fail rather than bypass controls. Robots responses are capped at
+512 KiB and cached for up to one hour (512 origins). Native PDF parsing is isolated
+in a child process with **512 MiB address space, 30s CPU and 45s wall-time limits**
+on Linux. PDFs requiring passwords are not decrypted. No OCR is performed;
+text extraction inspects at most 300 pages. HTML responses get bounded diagnostic
+metadata extraction and are rejected as PDFs; no HTML reference pages are published.
+
+### Deploy and verify
+
+Back up `DATA_DIR` before upgrading (columns are added automatically). Set a real
+`SESSION_SECRET`, `APP_ENV=production`, `ALLOW_PRIVATE_TARGETS=false`, and the actual
+HTTPS `PUBLIC_BASE_URL`. Preserve `DATA_DIR` on durable storage. Then:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pytest -o addopts='' -q
+.venv/bin/python -m compileall -q app run.py scripts tests
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+```
+
+Forward public GET **and HEAD** to FastAPI through the deployment proxy. Do not serve
+the repository root or `data/` as a static directory. The public robots file is generated
+by FastAPI; remove any stale proxy/CDN override or cached 405. Verify GET separately
+from HEAD after deployment, including one real `/pdf/{slug}` returned by the status API.
+A request with `User-Agent: Googlebot` is only a **googlebot-like HTTP test**, never
+Googlebot verification or indexing evidence. See the implementation report for the
+production TLS error encountered from this sandbox; production acceptance is pending.

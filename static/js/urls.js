@@ -53,7 +53,8 @@
               <div class="cell-sub mono">${esc(p.normalized_url || "")}</div>
             </td>
             <td class="cell-sub">${esc(p.source_domain || "—")}</td>
-            <td>${p.classification ? pill(p.classification) : '<span class="faint">—</span>'}</td>
+            <td>${p.html_metadata ? pill("HTML") : p.classification ? pill(p.classification) : '<span class="faint">—</span>'}</td>
+            <td>${esc(p.http_status ?? "—")}</td>
             <td>${fmtBytes(p.content_length)}</td>
             <td class="cell-sub">${p.page_count ? p.page_count + " pages" : "—"}</td>
             <td>
@@ -64,8 +65,11 @@
               }
             </td>
             <td>${pill(p.status)}</td>
+            <td>${pill(p.discovery_status)}</td>
+            <td>${pill(p.crawl_status)}</td>
             <td>${pill(p.index_status)}</td>
-            <td class="cell-sub">${timeAgo(p.updated_at)}</td>
+            <td>${pill(p.source_index_status || "INDEX_UNKNOWN")}</td>
+            <td class="cell-sub">${timeAgo(p.last_checked_at || p.last_probe_at)}</td>
             <td class="right">
               <div class="flex" style="justify-content:flex-end;gap:4px">
                 <a class="btn btn-sm btn-ghost" href="/pdfs/${p.id}" title="Open detail">

@@ -13,7 +13,7 @@ from typing import Any
 
 from ..config import Settings
 from ..database.repositories import Repos
-from ..utils import json_dumps, utcnow_iso
+from ..utils import json_dumps, utcnow_iso, parse_iso, utcnow
 
 log = logging.getLogger("bot_indexer.queue")
 
@@ -29,7 +29,7 @@ JOB_TYPES = (JOB_PIPELINE, JOB_PROBE, JOB_OBSERVE, JOB_GSC_INSPECT)
 JOB_PENDING = "PENDING"
 JOB_RUNNING = "RUNNING"
 JOB_RETRY_WAITING = "RETRY_WAITING"
-JOB_COMPLETED = "COMPLETED"
+JOB_COMPLETED = "DONE"
 JOB_FAILED = "FAILED"
 JOB_CANCELLED = "CANCELLED"
 
@@ -43,6 +43,9 @@ class QueueManager:
         self.repos = repos
         self.settings = settings
         # set by the application lifespan once shared services exist
+        self.intake_lock = asyncio.Lock()
+        self.resource_locks: dict[int, asyncio.Lock] = {}
+        self._timers: set = set()
         self.fetcher = None
         self.gsc = None
         self.bing = None
@@ -75,14 +78,22 @@ class QueueManager:
                     pdf_id=job.get("pdf_id") or None,
                     status="INFO",
                 )
-            elif job["status"] == JOB_RETRY_WAITING:
+            elif job["status"] in (JOB_PENDING, JOB_RETRY_WAITING):
                 await self._requeue(job["id"])
+        # Recover the small cross-file crash window between URL intake and job write.
+        with_jobs = {j.get("pdf_id") for j in jobs if j["job_type"] == JOB_PIPELINE}
+        orphaned = [p["id"] for p in await self.repos.pdfs.all()
+                    if p.get("status") == "RECEIVED" and p["id"] not in with_jobs]
+        await self.enqueue_pipelines(orphaned)
         for _ in range(self.concurrency):
             self._workers.append(asyncio.create_task(self._worker_loop(), name="queue-worker"))
         log.info("Queue started with %d workers", self.concurrency)
 
     async def stop(self) -> None:
         self._stop.set()
+        for timer in self._timers:
+            timer.cancel()
+        self._timers.clear()
         for w in self._workers:
             w.cancel()
         for w in self._workers:
@@ -96,7 +107,32 @@ class QueueManager:
     async def _requeue(self, job_id: int) -> None:
         job = await self.repos.jobs.get(job_id)
         if job:
-            self.queue.put_nowait((job["id"], job.get("priority", 5)))
+            due = parse_iso(job.get("next_attempt_at"))
+            delay = max(0, (due - utcnow()).total_seconds()) if due else 0
+            self.schedule(job["id"], job.get("priority", 5), delay)
+
+    def schedule(self, job_id: int, priority: int, delay: float = 0) -> None:
+        if not delay:
+            self.queue.put_nowait((job_id, priority))
+            return
+        def ready():
+            self._timers.discard(timer)
+            if not self._stop.is_set():
+                self.queue.put_nowait((job_id, priority))
+        timer = asyncio.get_running_loop().call_later(delay, ready)
+        self._timers.add(timer)
+
+    async def enqueue_pipelines(self, pdf_ids: list[int]) -> list[dict]:
+        now = utcnow_iso()
+        jobs = await self.repos.jobs.insert_many([
+            dict(pdf_id=pid, job_type=JOB_PIPELINE, payload="", priority=5,
+                 status=JOB_PENDING, attempts=0, max_attempts=self.settings.max_retries + 1,
+                 created_at=now) for pid in pdf_ids
+        ])
+        for job in jobs:
+            self.schedule(job["id"], 5)
+        self._stats["enqueued"] += len(jobs)
+        return jobs
 
     # -- API -----------------------------------------------------------------
 
@@ -131,7 +167,7 @@ class QueueManager:
                 stagger = float(payload["stagger_seconds"])
             except (TypeError, ValueError):
                 stagger = 0.0
-            asyncio.get_running_loop().call_later(stagger, lambda: self.queue.put_nowait((job["id"], priority)))
+            self.schedule(job["id"], priority, stagger)
         else:
             self.queue.put_nowait((job["id"], priority))
         return job
@@ -152,7 +188,7 @@ class QueueManager:
             "pending": by.get(JOB_PENDING, 0),
             "running": by.get(JOB_RUNNING, 0),
             "retrying": by.get(JOB_RETRY_WAITING, 0),
-            "completed": by.get(JOB_COMPLETED, 0),
+            "completed": by.get(JOB_COMPLETED, 0) + by.get("COMPLETED", 0),
             "failed": by.get(JOB_FAILED, 0),
             "cancelled": by.get(JOB_CANCELLED, 0),
             "total": len(jobs),
@@ -174,7 +210,10 @@ class QueueManager:
             except asyncio.TimeoutError:
                 continue
             try:
-                await process_job(self, job_id)
+                job = await self.repos.jobs.get(job_id)
+                key = (job or {}).get("pdf_id") or -job_id
+                async with self.resource_locks.setdefault(key, asyncio.Lock()):
+                    await process_job(self, job_id)
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001

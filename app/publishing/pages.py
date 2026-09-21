@@ -41,14 +41,10 @@ async def rebase_page_urls(repos: Repos, base_url: str) -> int:
 
 
 def base_slug_for(pdf_title: str | None, url: str) -> str:
-    """Stable slug base derived from the PDF title, falling back to the URL
-    file name. The unique suffix (hash of the normalized URL) is appended by
+    """Stable slug base derived only from the normalized URL filename, never
+    mutable PDF metadata. The unique suffix (hash of the normalized URL) is appended by
     the caller, so slugs are stable across restarts and unique by
     construction."""
-    if pdf_title:
-        base = slugify(pdf_title, max_len=MAX_SLUG_LEN - 10)
-        if base:
-            return base
     try:
         from urllib.parse import unquote, urlsplit
 
@@ -63,9 +59,10 @@ def base_slug_for(pdf_title: str | None, url: str) -> str:
 
 
 def make_slug(base: str, normalized_url: str) -> str:
-    suffix = short_hash(normalized_url, 6)
-    slug = f"{base}-{suffix}"
-    return slug[:MAX_SLUG_LEN].rstrip("-")
+    from ..pdf.validator import normalize_url
+
+    suffix = short_hash(normalize_url(normalized_url), 12)
+    return f"{base[:MAX_SLUG_LEN - 13]}-{suffix}"
 
 
 def page_description(analysis: AnalysisResult | None, pdf: dict, url: str) -> str:
@@ -73,7 +70,7 @@ def page_description(analysis: AnalysisResult | None, pdf: dict, url: str) -> st
     domain = pdf.get("source_domain") or "unknown source"
     parts = []
     title = (analysis.title if analysis else None) or (pdf.get("title") or "PDF document")
-    parts.append(f"Validated copy reference for “{title}” from {domain}.")
+    parts.append(f"Validated PDF reference for “{title}” from {domain}.")
     if analysis and analysis.page_count:
         parts.append(f"{analysis.page_count} page(s).")
     if analysis and analysis.classification == "TEXT_PDF":
@@ -95,7 +92,12 @@ async def create_page_for_pdf(
     """Create (or return the existing) dedicated page for a PDF record."""
     existing = await repos.pages.find(lambda p: p.get("pdf_id") == pdf["id"])
     if existing:
-        return existing[0]
+        page = existing[0]
+        title = truncate((analysis.title if analysis else None) or pdf.get("title") or page["title"], 200)
+        description = page_description(analysis, pdf, pdf["normalized_url"])
+        if title != page["title"] or description != page["description"] or page.get("pdf_sha256") != pdf.get("sha256"):
+            page = await repos.pages.update(page["id"], title=title, description=description, pdf_sha256=pdf.get("sha256"))
+        return page
 
     base = base_slug_for((analysis.title if analysis else None) or pdf.get("title"), pdf["normalized_url"])
     slug = make_slug(base, pdf["normalized_url"])
@@ -107,12 +109,13 @@ async def create_page_for_pdf(
         n += 1
 
     base_url = settings.public_base_url
-    title = (analysis.title if analysis else None) or pdf.get("title") or f"PDF from {pdf.get('source_domain')}"
+    title = (analysis.title if analysis else None) or pdf.get("title") or f"{base.replace('-', ' ')} — PDF from {pdf.get('source_domain')}"
     description = page_description(analysis, pdf, pdf["normalized_url"])
     now = utcnow_iso()
 
     page = await repos.pages.insert(
         pdf_id=pdf["id"],
+        pdf_sha256=pdf.get("sha256"),
         slug=slug,
         page_url=public_page_url(base_url, slug),
         title=truncate(title, 200),
@@ -163,7 +166,7 @@ def build_pdf_page_context(pdf: dict, page: dict, analysis: AnalysisResult | Non
         "description": page.get("description") or "",
         "page_url": canonical_url,
         "canonical_url": canonical_url,
-        "original_url": pdf.get("original_url"),
+        "original_url": pdf.get("normalized_url") or pdf.get("original_url"),
         "source_domain": pdf.get("source_domain"),
         "page_count": pdf.get("page_count"),
         "file_size": pdf.get("content_length"),

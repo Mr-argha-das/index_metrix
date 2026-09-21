@@ -11,7 +11,7 @@ HARD RULES implemented here:
   the status is UNKNOWN. Nothing is ever fabricated.
 
 The Google Indexing API is deliberately **not** implemented: it only supports
-blog posts and video content types, and is never appropriate for arbitrary
+JobPosting and BroadcastEvent embedded in VideoObject, and is never appropriate for arbitrary
 third-party PDFs.
 
 Auth: service-account JWT (RS256) → OAuth2 token, plain HTTP over
@@ -69,8 +69,8 @@ class GoogleSearchConsole:
     def __init__(self, service_account_raw: str, base_url: str = ""):
         self.sa = _load_service_account(service_account_raw)
         self.base_url = (base_url or "").rstrip("/")
-        self._token: str | None = None
-        self._token_exp: float = 0.0
+        self._access_token: str | None = None
+        self._access_token_exp: float = 0.0
         for key in ("client_email", "private_key", "token_uri"):
             if key not in self.sa:
                 raise GSCConfigError(f"Service account JSON missing '{key}'.")
@@ -110,9 +110,9 @@ class GoogleSearchConsole:
         )
         return signing_input + "." + _b64url(signature)
 
-    async def _token(self) -> str:
-        if self._token and time.time() < self._token_exp - 60:
-            return self._token
+    async def _get_token(self) -> str:
+        if self._access_token and time.time() < self._access_token_exp - 60:
+            return self._access_token
         jwt = self._make_jwt()
         async with httpx.AsyncClient(timeout=20.0) as client:
             resp = await client.post(
@@ -125,12 +125,12 @@ class GoogleSearchConsole:
         if resp.status_code != 200:
             raise GSCConfigError(f"OAuth token exchange failed (HTTP {resp.status_code}).")
         data = resp.json()
-        self._token = data["access_token"]
-        self._token_exp = time.time() + int(data.get("expires_in", 3600))
-        return self._token
+        self._access_token = data["access_token"]
+        self._access_token_exp = time.time() + int(data.get("expires_in", 3600))
+        return self._access_token
 
     async def _get(self, url: str) -> tuple[int, Any]:
-        token = await self._token()
+        token = await self._get_token()
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
         try:
@@ -140,7 +140,7 @@ class GoogleSearchConsole:
         return resp.status_code, body
 
     async def _post(self, url: str, body: dict | str, is_json: bool = True) -> tuple[int, Any]:
-        token = await self._token()
+        token = await self._get_token()
         headers = {"Authorization": f"Bearer {token}"}
         if is_json:
             headers["Content-Type"] = "application/json"
@@ -160,26 +160,25 @@ class GoogleSearchConsole:
 
     async def list_properties(self) -> list[str]:
         """The properties the authorized account can actually inspect."""
-        status, body = await self._get(f"{GSC_API}/v1/properties")
+        status, body = await self._get(f"{WEBMASTERS_V3}/sites")
         if status != 200:
             raise GSCConfigError(f"properties list failed (HTTP {status}): {body}")
-        return [p.get("siteUrl", "") for p in body.get("propertySite", []) if p.get("siteUrl")]
+        return [p.get("siteUrl", "") for p in body.get("siteEntry", []) if p.get("siteUrl")]
 
     def is_authorized(self, properties: list[str], property_url: str) -> bool:
-        """Normalize both sides (https://, sc-domain:) and compare."""
-        def norm(u: str) -> str:
-            u = (u or "").strip().rstrip("/")
-            if u.startswith("sc-domain:"):
-                return "domain:" + u.split(":", 1)[1].lower()
-            if u.startswith(("http://", "https://")):
-                from urllib.parse import urlsplit
+        """Exact listed property identity: scheme/path permissions are not interchangeable."""
+        return property_url in properties
 
-                host = urlsplit(u).hostname or ""
-                return "url:" + host.lower()
-            return u.lower()
-
-        target = norm(property_url)
-        return any(norm(p) == target for p in properties)
+    @staticmethod
+    def property_contains(site: str, url: str) -> bool:
+        from urllib.parse import urlsplit
+        target = urlsplit(url)
+        if site.startswith("sc-domain:"):
+            domain = site.split(":", 1)[1].lower()
+            host = (target.hostname or "").lower()
+            return host == domain or host.endswith("." + domain)
+        prefix = urlsplit(site)
+        return (target.scheme, target.netloc) == (prefix.scheme, prefix.netloc) and target.path.startswith(prefix.path or "/")
 
     # -- URL Inspection (our own pages only) ----------------------------------------
 
@@ -192,8 +191,8 @@ class GoogleSearchConsole:
 
         site_enc = quote(site, safe="")
         status, body = await self._post(
-            f"{GSC_API}/v1/urlInspection/index/{site_enc}/inspect",
-            {"inspectionUrl": {"url": url}},
+            f"{GSC_API}/v1/urlInspection/index:inspect",
+            {"inspectionUrl": url, "siteUrl": site},
         )
         if status == 200:
             return body
@@ -212,21 +211,12 @@ class GoogleSearchConsole:
             return {"error": str(exc)}
         from urllib.parse import urlsplit
 
-        host = urlsplit(page_url).hostname or ""
-        # Try URL-prefix property first, then domain property.
-        for site in (f"https://{host}/", f"http://{host}/", f"sc-domain:{host}"):
-            if not self.is_authorized(properties, site):
-                continue
-            result = await self.inspect_url(site, page_url)
-            if "error" in result and "404" in str(result.get("error")):
-                continue
-            return result
-        return {
-            "error": (
-                f"Property for host '{host}' is not in the authorized property list. "
-                "NOT_AUTHORIZED — no inspection performed."
-            )
-        }
+        if not self.property_contains(self.base_url + "/", page_url):
+            return {"error": "NOT_AUTHORIZED: inspection is restricted to our configured origin."}
+        for site in properties:
+            if self.property_contains(site, page_url):
+                return await self.inspect_url(site, page_url)
+        return {"error": "NOT_AUTHORIZED: URL is not in an authorized property."}
 
     # -- sitemaps -------------------------------------------------------------------
 
@@ -234,7 +224,7 @@ class GoogleSearchConsole:
         from urllib.parse import quote
 
         site_enc = quote(site, safe="")
-        status, body = await self._get(f"{GSC_API}/v1/properties/{site_enc}/sitemaps")
+        status, body = await self._get(f"{WEBMASTERS_V3}/sites/{site_enc}/sitemaps")
         if status != 200:
             return {"error": f"HTTP {status}: {body}"}
         return {"sitemaps": body.get("sitemap", [])}
@@ -245,11 +235,15 @@ class GoogleSearchConsole:
         from urllib.parse import quote
 
         site_enc = quote(site, safe="")
-        status, body = await self._post(
-            f"{WEBMASTERS_V3}/sitemaps/{site_enc}?sitemapUrl={quote(sitemap_url, safe='')}",
-            body="",
-            is_json=False,
-        )
-        if status in (200, 201):
-            return {"ok": True, "response": body}
-        return {"error": f"HTTP {status}: {body}"}
+        properties = await self.list_properties()
+        if site not in properties or not self.property_contains(site, sitemap_url) or not self.property_contains(self.base_url + "/", sitemap_url):
+            return {"error": "NOT_AUTHORIZED: sitemap must be on our authorized property."}
+        token = await self._get_token()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.put(
+                f"{WEBMASTERS_V3}/sites/{site_enc}/sitemaps/{quote(sitemap_url, safe='')}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if response.status_code in (200, 201, 204):
+            return {"ok": True, "message": "Sitemap submission accepted; not indexing evidence."}
+        return {"error": f"HTTP {response.status_code}"}

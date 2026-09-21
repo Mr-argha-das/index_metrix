@@ -28,7 +28,8 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
+from urllib.robotparser import RobotFileParser
 
 import aiohttp
 
@@ -85,13 +86,17 @@ class PinnedResolver(aiohttp.resolver.ThreadedResolver):
                 {"host": p["host"], "port": port, "family": p["family"], "proto": 0}
                 for p in pinned
             ]
-        return await super().resolve(host, port, family)
+        raise OSError("Unvalidated DNS resolution refused")
 
 
 class HostRateLimiter:
     """Sliding-window per-host request rate limit + concurrency cap."""
 
-    def __init__(self, per_minute: int = 10, per_host_concurrency: int = 2):
+    def __init__(self, per_minute: int = 10, per_host_concurrency: int = 2, delay: float = 1.0):
+        self.delay = delay
+        self.host_delays: dict[str, float] = {}
+        self._host_locks: dict[str, asyncio.Lock] = {}
+        self._last: dict[str, float] = {}
         self.per_minute = per_minute
         self.per_host_concurrency = per_host_concurrency
         self._hits: dict[str, deque] = {}
@@ -106,19 +111,25 @@ class HostRateLimiter:
         return sem
 
     async def acquire(self, host: str) -> None:
-        now = time.monotonic()
-        dq = self._hits.setdefault(host, deque())
-        while dq and dq[0] < now - 60:
-            dq.popleft()
-        if len(dq) >= self.per_minute:
-            raise FetchError(
-                f"Rate limit exceeded for host '{host}' "
-                f"({self.per_minute} requests/minute). Try again later.",
-                code="RATE_LIMITED",
-                retryable=True,
-            )
-        dq.append(now)
         await self._sem(host).acquire()
+        try:
+            async with self._host_locks.setdefault(host, asyncio.Lock()):
+                dq = self._hits.setdefault(host, deque())
+                now = time.monotonic()
+                while dq and dq[0] <= now - 60:
+                    dq.popleft()
+                wait = max(0, self._last.get(host, 0) + max(self.delay, self.host_delays.get(host, 0)) - now)
+                if len(dq) >= self.per_minute:
+                    wait = max(wait, dq[0] + 60 - now)
+                await asyncio.sleep(wait)
+                now = time.monotonic()
+                while dq and dq[0] <= now - 60:
+                    dq.popleft()
+                dq.append(now)
+                self._last[host] = now
+        except BaseException:
+            self.release(host)
+            raise
 
     def release(self, host: str) -> None:
         sem = self._sems.get(host)
@@ -138,14 +149,17 @@ class FetchResult:
     redirect_chain: list[str] = field(default_factory=list)
     response_time_ms: int = 0
     fetched_at: str = ""
+    robots_checks: list[dict] = field(default_factory=list)
 
 
 class SafeFetcher:
     def __init__(self, settings, rate_limiter: HostRateLimiter | None = None):
         self.settings = settings
         self.rate_limiter = rate_limiter or HostRateLimiter(
-            settings.fetch_rate_per_minute, settings.fetch_concurrency_per_host
+            settings.fetch_rate_per_minute, settings.fetch_concurrency_per_host, settings.fetch_host_delay_seconds
         )
+        self._robots_cache: dict[str, tuple] = {}
+        self._robots_locks: dict[str, asyncio.Lock] = {}
         self._resolver = PinnedResolver()
         self._session: aiohttp.ClientSession | None = None
 
@@ -160,8 +174,9 @@ class SafeFetcher:
             self._session = aiohttp.ClientSession(
                 connector=aiohttp.TCPConnector(
                     resolver=self._resolver,
-                    ttl_dns_cache=300,
-                    verify_ssl=True,
+                    use_dns_cache=False,
+                    force_close=True,
+                    ssl=True,
                 ),
                 timeout=timeout,
             )
@@ -179,6 +194,7 @@ class SafeFetcher:
         max_bytes: int | None = None,
         method: str = "GET",
         probe_only: bool = False,
+        _robots_request: bool = False,
     ) -> FetchResult:
         """Fetch a URL with SSRF protection on every redirect hop.
 
@@ -190,13 +206,14 @@ class SafeFetcher:
         )
         current = url
         chain: list[str] = []
+        robots_checks = []
         deadline_redirects = settings.max_redirects
         session = await self._get_session()
 
         for hop in range(deadline_redirects + 1):
             try:
-                validated: ValidatedURL = validate_url(
-                    current, allow_private=settings.allow_private_targets
+                validated: ValidatedURL = await asyncio.to_thread(
+                    validate_url, current, allow_private=settings.allow_private_targets
                 )
             except URLValidationError as exc:
                 kind = "redirect" if hop > 0 else "URL"
@@ -205,15 +222,14 @@ class SafeFetcher:
                     code="SSRF_BLOCKED",
                     retryable=False,
                 ) from exc
+            if not _robots_request:
+                robots_checks.append(await self.check_robots(validated.url))
             await self.rate_limiter.acquire(validated.host)
             try:
                 await self._resolver.pin(validated.host, validated.resolved_ips)
-                try:
-                    result = await self._do_request(
-                        session, validated.url, method, max_bytes, probe_only
-                    )
-                finally:
-                    await self._resolver.unpinned(validated.host)
+                result = await self._do_request(
+                    session, validated.url, method, max_bytes, probe_only
+                )
             finally:
                 self.rate_limiter.release(validated.host)
 
@@ -237,9 +253,47 @@ class SafeFetcher:
                     )
                 current = next_url
                 continue
+            result.url = url
+            result.redirect_chain = chain
+            result.robots_checks = robots_checks
             return result
 
         raise FetchError("Redirect limit exhausted.", code="REDIRECT_LOOP", retryable=False)
+
+    async def check_robots(self, url: str) -> dict:
+        """Conservative robots policy. Never bypass denial/unavailable controls.
+
+        404/410 means no policy; 401/403 denies; 429/5xx/network failure
+        retries later. Uses the same size/redirect/SSRF boundaries as content.
+        """
+        parts = urlsplit(url)
+        origin = f"{parts.scheme}://{parts.netloc}"
+        async with self._robots_locks.setdefault(origin, asyncio.Lock()):
+            cached = self._robots_cache.get(origin)
+            if not cached or cached[0] < time.monotonic():
+                response = await self.fetch(origin + "/robots.txt", max_bytes=512 * 1024, _robots_request=True)
+                parser = RobotFileParser()
+                if response.status in (404, 410):
+                    parser.allow_all = True
+                elif response.status in (401, 403):
+                    parser.disallow_all = True
+                elif response.status == 200 and response.content_type in ("text/plain", ""):
+                    parser.parse(response.content.decode("utf-8", errors="replace").splitlines())
+                else:
+                    raise FetchError("robots.txt unavailable or not a usable policy; resource fetch deferred.",
+                                     code="ROBOTS_UNAVAILABLE", status=response.status, retryable=True)
+                cached = (time.monotonic() + 3600, parser, response.status, _iso_now())
+                if len(self._robots_cache) >= 512:
+                    self._robots_cache.pop(next(iter(self._robots_cache)))
+                self._robots_cache[origin] = cached
+            _, parser, status, checked = cached
+        allowed = parser.can_fetch(self.settings.fetch_user_agent, url)
+        if not allowed:
+            raise FetchError("robots.txt disallows this URL for our fetcher.", code="ROBOTS_DENIED", retryable=False)
+        crawl_delay = parser.crawl_delay(self.settings.fetch_user_agent)
+        if crawl_delay:
+            self.rate_limiter.host_delays[parts.hostname] = float(crawl_delay)
+        return {"url": origin + "/robots.txt", "status": status, "allowed": True, "checkedAt": checked}
 
     async def _do_request(
         self,
@@ -259,9 +313,15 @@ class SafeFetcher:
                 hdrs = {k: v for k, v in resp.headers.items()}
                 content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
                 content_length_hdr = resp.headers.get("Content-Length")
+                if status in (301, 302, 303, 307, 308) or method == "HEAD":
+                    return FetchResult(url, str(resp.url), status, hdrs, content_type, b"", 0)
+                if not probe_only and content_length_hdr and content_length_hdr.isdigit() and int(content_length_hdr) > max_bytes:
+                    raise FetchError("Response exceeds maximum download size.", code="TOO_LARGE", status=status, retryable=False)
                 chunks: list[bytes] = []
                 total = 0
                 async for chunk in resp.content.iter_chunked(64 * 1024):
+                    if probe_only:
+                        chunk = chunk[:max(0, max_bytes - total)]
                     total += len(chunk)
                     if total > max_bytes:
                         raise FetchError(
@@ -272,7 +332,7 @@ class SafeFetcher:
                             retryable=False,
                         )
                     chunks.append(chunk)
-                    if probe_only and total >= 64 * 1024:
+                    if probe_only and total >= max_bytes:
                         break
                 elapsed_ms = int((time.monotonic() - started) * 1000)
                 return FetchResult(

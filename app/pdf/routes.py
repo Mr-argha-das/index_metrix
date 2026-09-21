@@ -19,7 +19,7 @@ log = logging.getLogger("bot_indexer.pdf.routes")
 router = APIRouter(prefix="/api/pdfs", tags=["pdfs"])
 pages = APIRouter(tags=["pdf-pages"])
 
-MAX_BULK_URLS = 500
+MAX_BULK_URLS = 10000
 
 
 def _repos(request: Request) -> Repos:
@@ -59,96 +59,50 @@ def _parse_url_text(text: str) -> list[str]:
 async def _submit_urls(
     request: Request, urls: list[str], user: dict
 ) -> dict:
-    repos = _repos(request)
-    settings = _settings(request)
-    accepted: list[dict] = []
-    duplicates: list[dict] = []
-    invalid: list[dict] = []
+    from urllib.parse import urlsplit
 
     if len(urls) > MAX_BULK_URLS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Too many URLs in one request (max {MAX_BULK_URLS}).",
-        )
-
-    for raw in urls:
-        # 1) normalize / scheme / structure validation (fast, no network)
-        try:
-            normalized = normalize_url(raw)
-        except URLValidationError as exc:
-            invalid.append({"url": raw.strip()[:500], "reason": str(exc)})
-            continue
-
-        # 2) full SSRF validation (DNS resolution + private IP checks)
-        try:
-            vurl = validate_url(normalized, allow_private=settings.allow_private_targets)
-        except URLValidationError as exc:
-            invalid.append({"url": raw.strip()[:500], "reason": str(exc)})
-            continue
-
-        # 3) duplicate detection on normalized URL
-        url_hash = sha256_hex(normalized)
-        existing = await repos.pdfs.find(lambda r: r.get("url_hash") == url_hash)
-        if existing:
-            duplicates.append(
-                {"url": normalized, "existing_pdf_id": existing[0]["id"], "status": existing[0]["status"]}
+        raise HTTPException(status_code=400, detail=f"Max {MAX_BULK_URLS} URLs per batch.")
+    repos, queue = _repos(request), _queue(request)
+    accepted, duplicates, invalid = [], [], []
+    # Serializes normalized-URL uniqueness across concurrent intake requests.
+    # DNS/HTTP are deliberately deferred to workers, never performed here.
+    async with queue.intake_lock:
+        known = {p["url_hash"]: p for p in await repos.pdfs.all()}
+        pending = {}
+        now = utcnow_iso()
+        for raw in urls:
+            try:
+                normalized = normalize_url(raw)
+            except URLValidationError as exc:
+                invalid.append({"url": raw[:500], "reason": str(exc)})
+                continue
+            digest = sha256_hex(normalized)
+            if digest in known or digest in pending:
+                existing = known.get(digest, {})
+                item = {"url": normalized, "status": "DUPLICATE"}
+                if existing and (user.get("role") == "ADMIN" or existing.get("user_id") == user["id"]):
+                    item["existing_pdf_id"] = existing["id"]
+                duplicates.append(item)
+                continue
+            pending[digest] = dict(
+                user_id=user["id"], original_url=normalized, normalized_url=normalized,
+                url_hash=digest, source_domain=urlsplit(normalized).hostname,
+                status="RECEIVED", submission_status="RECEIVED",
+                discovery_status="NOT_SUBMITTED", discovery_channels="[]",
+                crawl_status="CRAWL_UNKNOWN", index_status="INDEX_UNKNOWN",
+                source_index_status="INDEX_UNKNOWN", index_evidence="", crawl_evidence="",
+                created_at=now, updated_at=now,
             )
-            await repos.events.add(
-                "DUPLICATE_URL",
-                f"Duplicate submission: {normalized} (already PDF #{existing[0]['id']})",
-                status="WARN",
-                user_id=user.get("id"),
-            )
-            continue
-
-        pdf = await repos.pdfs.insert(
-            user_id=user["id"],
-            original_url=raw.strip()[:2048],
-            normalized_url=normalized,
-            url_hash=url_hash,
-            source_domain=vurl.host,
-            final_url=None,
-            status="RECEIVED",
-            http_status=None,
-            content_type=None,
-            content_length=None,
-            sha256=None,
-            page_count=None,
-            title=None,
-            author=None,
-            subject=None,
-            creator=None,
-            producer=None,
-            created_date=None,
-            modified_date=None,
-            text_length=None,
-            first_page_text=None,
-            language=None,
-            classification=None,
-            error=None,
-            discovery_status="DISCOVERY_PENDING",
-            crawl_status="CRAWL_UNKNOWN",
-            index_status="INDEX_UNKNOWN",
-            index_evidence="",
-            crawl_evidence="",
-            created_at=utcnow_iso(),
-            updated_at=utcnow_iso(),
-        )
-        await repos.events.add(
-            "PDF_CREATED",
-            f"PDF URL received: {normalized}",
-            pdf_id=pdf["id"],
-            user_id=user.get("id"),
-            status="RECEIVED",
-        )
-        stagger = 0.0 if len(urls) <= 1 else min(0.5 * len(accepted), 5.0)
-        job = await _queue(request).enqueue(
-            JOB_PIPELINE,
-            pdf_id=pdf["id"],
-            payload={"stagger_seconds": stagger},
-        )
-        accepted.append({"url": normalized, "pdf_id": pdf["id"], "job_id": job["id"]})
-
+        pdfs = await repos.pdfs.insert_many(list(pending.values()))
+        jobs = await queue.enqueue_pipelines([p["id"] for p in pdfs])
+        for pdf, job in zip(pdfs, jobs):
+            accepted.append({"url": pdf["normalized_url"], "pdf_id": pdf["id"],
+                             "job_id": job["id"], "status": "PENDING"})
+        by_url = {p["normalized_url"]: p["id"] for p in pdfs}
+        for duplicate in duplicates:
+            if duplicate["url"] in by_url:
+                duplicate["existing_pdf_id"] = by_url[duplicate["url"]]
     return {"accepted": accepted, "duplicates": duplicates, "invalid": invalid}
 
 
@@ -171,7 +125,7 @@ async def api_submit_pdf(
         raise HTTPException(status_code=400, detail="Provide 'url' or a non-empty 'urls' list.")
     result = await _submit_urls(request, urls, user)
     if not result["accepted"] and not result["duplicates"]:
-        raise HTTPException(status_code=422, detail="No URLs could be accepted.", extra=result)
+        raise HTTPException(status_code=422, detail={"message": "No URLs could be accepted.", **result})
     return result
 
 
@@ -197,7 +151,7 @@ async def api_submit_file(
 ):
     settings = _settings(request)
     max_bytes = settings.max_upload_mb * 1024 * 1024
-    data = await file.read()
+    data = await file.read(max_bytes + 1)
     if len(data) > max_bytes:
         raise HTTPException(status_code=413, detail="Uploaded file is too large.")
     filename = (file.filename or "").lower()

@@ -18,14 +18,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 
 from ..config import Settings
 from ..database.repositories import Repos, effective_setting
-from ..pdf.analyzer import analyze_pdf, check_signature
+from ..pdf.analyzer import analyze_pdf_isolated, check_signature
 from ..pdf.fetcher import FetchError
 from ..pdf.validator import URLValidationError, validate_url
 from ..publishing.pages import create_page_for_pdf
-from ..utils import json_dumps, sha256_hex, utcnow_iso
+from ..utils import json_dumps, sha256_hex, utcnow_iso, utcnow
 from .manager import JOB_GSC_INSPECT, JOB_OBSERVE, JOB_PIPELINE, JOB_PROBE, QueueManager, backoff_seconds
 
 log = logging.getLogger("bot_indexer.worker")
@@ -48,7 +49,7 @@ DS_PENDING = "DISCOVERY_PENDING"
 DS_SUBMITTED = "DISCOVERY_SUBMITTED"
 CS_UNKNOWN = "CRAWL_UNKNOWN"
 CS_OBSERVED = "CRAWL_OBSERVED"
-CS_CHECKED = "CRAWL_CHECKED"
+CS_CHECKED = "SEARCH_ENGINE_CRAWL_EVIDENCE"
 IS_UNKNOWN = "INDEX_UNKNOWN"
 IS_INDEXED = "INDEXED"
 IS_NOT_INDEXED = "NOT_INDEXED"
@@ -71,7 +72,7 @@ class PipelineFinal(Exception):
 async def process_job(manager: QueueManager, job_id: int) -> None:
     repos = manager.repos
     job = await repos.jobs.get(job_id)
-    if not job or job["status"] in ("COMPLETED", "CANCELLED", "FAILED"):
+    if not job or job["status"] in ("COMPLETED", "DONE", "CANCELLED", "FAILED", "RUNNING"):
         return
     if job.get("attempts", 0) >= job.get("max_attempts", 1):
         await repos.jobs.update(job_id, status="FAILED", completed_at=utcnow_iso(), error="Attempt limit reached")
@@ -98,7 +99,7 @@ async def process_job(manager: QueueManager, job_id: int) -> None:
             raise PipelineFinal(f"Unknown job type {jtype}", ST_FAILED)
 
         duration_ms = int((asyncio.get_event_loop().time() - started) * 1000)
-        await repos.jobs.update(job_id, status="COMPLETED", completed_at=utcnow_iso(), error=None)
+        await repos.jobs.update(job_id, status="DONE", attempts=(job.get("attempts") or 0) + 1, next_attempt_at=None, completed_at=utcnow_iso(), error=None)
         manager._stats["completed"] += 1
         log.info("job_id=%s type=%s completed duration_ms=%d", job_id, jtype, duration_ms)
         if jtype == JOB_PIPELINE:
@@ -133,7 +134,7 @@ async def _handle_retry(manager: QueueManager, job: dict, message: str) -> None:
         if job["job_type"] == JOB_PIPELINE and pdf_id:
             pdf = await repos.pdfs.get(pdf_id)
             if pdf and pdf.get("status") not in (ST_INVALID, ST_PDF_INVALID, ST_PAGE_PUBLISHED, ST_FAILED):
-                await repos.pdfs.update(pdf_id, status=ST_FAILED, error=message[:500])
+                await repos.pdfs.update(pdf_id, status=ST_FAILED, submission_status="VALIDATION_FAILED", error=message[:500])
             await repos.events.add(
                 "JOB_FAILED",
                 f"Job {job['id']} failed after {attempts} attempts: {message[:200]}",
@@ -145,6 +146,7 @@ async def _handle_retry(manager: QueueManager, job: dict, message: str) -> None:
     delay = backoff_seconds(attempts, base=manager.settings.retry_backoff_base)
     await repos.jobs.update(
         job["id"],
+        next_attempt_at=(utcnow() + timedelta(seconds=delay)).isoformat(),
         status="RETRY_WAITING",
         attempts=attempts,
         error=message[:500],
@@ -155,16 +157,16 @@ async def _handle_retry(manager: QueueManager, job: dict, message: str) -> None:
         pdf_id=pdf_id,
         status="WARN",
     )
-    loop = asyncio.get_running_loop()
-    loop.call_later(delay, lambda: manager.queue.put_nowait((job["id"], job.get("priority", 5))))
+    manager.schedule(job["id"], job.get("priority", 5), delay)
 
 
 async def _handle_final(manager: QueueManager, job: dict, exc: PipelineFinal) -> None:
     repos = manager.repos
+    manager._stats["failed"] += 1
     pdf_id = job.get("pdf_id") or None
     await repos.jobs.update(
         job["id"],
-        status="COMPLETED",  # job finished; the *verdict* is recorded on the PDF
+        status="FAILED",  # definitive validation failure, not a successful job
         attempts=(job.get("attempts") or 0) + 1,
         error=exc.message[:500],
         completed_at=utcnow_iso(),
@@ -173,6 +175,7 @@ async def _handle_final(manager: QueueManager, job: dict, exc: PipelineFinal) ->
         await repos.pdfs.update(
             pdf_id,
             status=exc.status,
+            submission_status="VALIDATION_FAILED",
             error=exc.message[:500],
             **(
                 {"classification": exc.classification}
@@ -228,7 +231,7 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         status="RUNNING",
     )
     try:
-        vurl = validate_url(pdf["original_url"], allow_private=settings.allow_private_targets)
+        vurl = await asyncio.to_thread(validate_url, pdf["normalized_url"], allow_private=settings.allow_private_targets)
     except URLValidationError as exc:
         raise PipelineFinal(str(exc), ST_INVALID, classification="INVALID") from exc
     await repos.pdfs.update(pdf_id, normalized_url=vurl.url, source_domain=vurl.host)
@@ -252,6 +255,8 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
     try:
         result = await manager.fetcher.fetch(vurl.url)
     except FetchError as exc:
+        await repos.pdfs.update(pdf_id, last_checked_at=utcnow_iso(),
+                                robots_check=json_dumps({"error": exc.code, "details": exc.message}) if exc.code.startswith("ROBOTS") else pdf.get("robots_check"))
         if exc.retryable:
             raise PipelineRetryable(exc.message) from exc
         if exc.status in (401, 403, 404, 410):
@@ -268,6 +273,9 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         content_type=result.content_type,
         content_length=len(result.content),
         final_url=result.final_url,
+        last_checked_at=result.fetched_at or utcnow_iso(),
+        crawl_status=pdf.get("crawl_status") if pdf.get("crawl_status") in (CS_CHECKED, "CRAWL_CHECKED") else "FETCH_CHECKED",
+        robots_check=json_dumps(result.robots_checks),
     )
     await repos.events.add(
         "FETCH_OK",
@@ -296,11 +304,15 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         raise PipelineRetryable("Remote server rate-limited our request (HTTP 429).")
     if 500 <= result.status < 600:
         raise PipelineRetryable(f"Remote server error (HTTP {result.status}).")
-    if not (200 <= result.status < 300):
+    if result.status != 200:
         raise PipelineFinal(f"Unexpected HTTP status {result.status}.", ST_FAILED)
 
     # ---- STEP 4: PDF signature (never trust Content-Type alone) --------------
     if not check_signature(result.content):
+        if result.content_type in ("text/html", "application/xhtml+xml"):
+            from ..pdf.html import extract_html
+            metadata = extract_html(result.content, result.final_url)
+            await repos.pdfs.update(pdf_id, html_metadata=json_dumps(metadata))
         raise PipelineFinal(
             f"Content mismatch: HTTP {result.status} with type "
             f"'{result.content_type or 'none'}' but the body does not contain "
@@ -317,7 +329,7 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         pdf_id=pdf_id,
         status="RUNNING",
     )
-    analysis = await asyncio.to_thread(analyze_pdf, result.content)
+    analysis = await analyze_pdf_isolated(result.content)
     digest = sha256_hex(result.content)
 
     if not analysis.ok:
@@ -339,6 +351,8 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
     await repos.pdfs.update(
         pdf_id,
         status=ST_PDF_VALID,
+        submission_status="VALIDATED",
+        validated_at=utcnow_iso(),
         sha256=digest,
         classification=analysis.classification,
         title=analysis.title,
@@ -411,18 +425,14 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         )
 
     # ---- STEP 8: discovery pending ---------------------------------------------
+    # Publishing only establishes discovery channels. Preserve independent
+    # evidence already recorded; revalidation must not erase it.
+    current = await repos.pdfs.get(pdf_id)
+    channels = ["reference-page"] + (["sitemap"] if sitemap_on else []) + (["rss"] if rss_on else [])
     await repos.pdfs.update(
-        pdf_id,
-        discovery_status=DS_PENDING,
-        crawl_status=CS_UNKNOWN,
-        index_status=IS_UNKNOWN,
-        index_evidence=json_dumps(
-            {"status": IS_UNKNOWN, "reason": "No authoritative evidence recorded yet."}
-        ),
-        crawl_evidence=json_dumps(
-            {"status": CS_UNKNOWN, "reason": "No crawl evidence recorded yet. "
-             "Our server fetches are technical probes, not search-engine crawls."}
-        ),
+        pdf_id, submission_status="DISCOVERY_SUBMITTED",
+        discovery_status="DISCOVERED" if current.get("discovery_status") == "DISCOVERED" else DS_PENDING,
+        discovery_channels=json_dumps(channels),
     )
     await repos.events.add(
         "DISCOVERY_PENDING",
@@ -513,11 +523,13 @@ async def run_probe(manager: QueueManager, job: dict) -> None:
             "checked_at": utcnow_iso(),
         },
     )
-    # Crawl status stays CRAWL_UNKNOWN: a technical probe is not a crawl.
-    await repos.pdfs.update(pdf_id, crawl_status=CS_UNKNOWN)
+    # A probe is FETCH_CHECKED, never search-engine evidence; preserve existing evidence.
+    current = await repos.pdfs.get(pdf_id)
+    if current and current.get("crawl_status") not in (CS_CHECKED, "CRAWL_CHECKED"):
+        await repos.pdfs.update(pdf_id, crawl_status="FETCH_CHECKED")
     await repos.events.add(
-        "CRAWL_UNKNOWN",
-        "Crawl status remains UNKNOWN — no search-engine crawl evidence exists. "
+        "FETCH_CHECKED",
+        "Fetch checked by our server; this supplies no search-engine crawl evidence. "
         "A technical probe must never be reported as a crawl.",
         pdf_id=pdf_id,
         status="INFO",

@@ -32,7 +32,7 @@ def _settings(request: Request) -> Settings:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/pdf/{slug}", include_in_schema=False)
+@router.api_route("/pdf/{slug}", include_in_schema=False, methods=["GET", "HEAD"])
 async def pdf_dedicated_page(slug: str, request: Request):
     repos = _repos(request)
     pages = await repos.pages.find(lambda p: p.get("slug") == slug)
@@ -71,7 +71,7 @@ async def pdf_dedicated_page(slug: str, request: Request):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/sitemap.xml", response_class=Response, include_in_schema=False)
+@router.api_route("/sitemap.xml", response_class=Response, include_in_schema=False, methods=["GET", "HEAD"])
 async def sitemap(request: Request):
     settings = _settings(request)
     if not await _effective_sitemap_enabled(request):
@@ -81,16 +81,17 @@ async def sitemap(request: Request):
     base = settings.public_base_url
     if len(pages) > sitemap_mod.SITEMAP_CHUNK_SIZE:
         # Sitemap index + first chunk
-        return Response(sitemap_mod.render_sitemap_index(base, len(pages), pages[-1].get("updated_at", "")), media_type="application/xml")
-    latest = pages[-1].get("updated_at") if pages else None
+        return Response(sitemap_mod.render_sitemap_index(base, len(pages), max((p.get("updated_at") or "" for p in pages), default="")), media_type="application/xml")
     return Response(sitemap_mod.render_sitemap(pages, base, chunk=1), media_type="application/xml")
 
 
-@router.get("/sitemap-{chunk}.xml", response_class=Response, include_in_schema=False)
+@router.api_route("/sitemap-{chunk}.xml", response_class=Response, include_in_schema=False, methods=["GET", "HEAD"])
 async def sitemap_chunk(chunk: int, request: Request):
     repos = _repos(request)
     settings = _settings(request)
     pages = [p for p in await repos.pages.all(order="published_at") if p.get("sitemap_included")]
+    if not await _effective_sitemap_enabled(request) or chunk < 1 or chunk > max(1, (len(pages) + sitemap_mod.SITEMAP_CHUNK_SIZE - 1) // sitemap_mod.SITEMAP_CHUNK_SIZE):
+        raise HTTPException(status_code=404, detail="Sitemap chunk not found.")
     start = (chunk - 1) * sitemap_mod.SITEMAP_CHUNK_SIZE
     part = pages[start : start + sitemap_mod.SITEMAP_CHUNK_SIZE]
     return Response(
@@ -113,9 +114,12 @@ async def _effective_sitemap_enabled(request: Request) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/rss.xml", response_class=Response, include_in_schema=False)
+@router.api_route("/rss.xml", response_class=Response, include_in_schema=False, methods=["GET", "HEAD"])
 async def rss_feed(request: Request):
     settings = _settings(request)
+    from ..database.repositories import effective_setting
+    if not await effective_setting(request.app.state.db, "rss_enabled"):
+        raise HTTPException(status_code=404, detail="RSS is disabled.")
     repos = _repos(request)
     pages = [p for p in await repos.pages.all(order="published_at") if p.get("rss_included")]
     return Response(rss_mod.render_rss(pages, settings), media_type="application/rss+xml")
@@ -137,12 +141,14 @@ def render_robots(settings: Settings) -> str:
         "Allow: /sitemap.xml\n"
         "Allow: /rss.xml\n"
         "Disallow: /api/\n"
+        "Disallow: /admin/\n"
+        "Disallow: /data/\n"
         "Disallow: /login\n"
         f"\nSitemap: {base}/sitemap.xml\n"
     )
 
 
-@router.get("/robots.txt", response_class=PlainTextResponse, include_in_schema=False)
+@router.api_route("/robots.txt", response_class=PlainTextResponse, include_in_schema=False, methods=["GET", "HEAD"])
 async def robots(request: Request):
     return PlainTextResponse(render_robots(_settings(request)))
 

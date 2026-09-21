@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     )
 
     # -- application ------------------------------------------------------
-    app_name: str = "BOT INDEXER"
+    app_name: str = "INDEX MATRIX"
     app_env: str = "development"  # development | production | test
     # Canonical public origin for generated pages, sitemap, RSS and robots.txt.
     # Local development can override this through PUBLIC_BASE_URL in .env.
@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     # Per-host outbound fetch rate limit (requests / minute)
     fetch_rate_per_minute: int = Field(default=10, ge=1, le=1000)
     # Max concurrent outbound fetches per host
+    fetch_host_delay_seconds: float = Field(default=1.0, ge=0, le=60)
     fetch_concurrency_per_host: int = Field(default=2, ge=1, le=5)
 
     # -- queue ------------------------------------------------------------
@@ -143,4 +144,6 @@ def validate_production(settings: Settings) -> list[str]:
             "ADMIN_PASSWORD must be changed from the placeholder before "
             "starting in production."
         )
+    if settings.allow_private_targets:
+        problems.append("ALLOW_PRIVATE_TARGETS must be false in production.")
     return problems

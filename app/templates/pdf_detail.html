@@ -24,7 +24,8 @@
           <dt>HTTP status</dt><dd>{{ pdf.http_status or "—" }}</dd>
           <dt>Content-Type</dt><dd class="mono">{{ pdf.content_type or "—" }}</dd>
           <dt>File size</dt><dd>{{ pdf.content_length }} bytes</dd>
-          <dt>SHA-256</dt><dd class="mono small" title="{{ pdf.sha256 }}">{{ (pdf.sha256 or "—")[:32] }}…</dd>
+          <dt>SHA-256</dt><dd class="mono small" title="{{ pdf.sha256 }}">{{ pdf.sha256 or "—" }}</dd>
+          <dt>Valid PDF</dt><dd>{{ "Yes" if pdf.classification in ("TEXT_PDF", "SCANNED_OR_EMPTY_PDF") else "Not validated" }}</dd>
           <dt>Classification</dt><dd>{{ pdf.classification or "—" }}</dd>
           <dt>Submitted</dt><dd>{{ pdf.created_at }}</dd>
           {% if pdf.error %}<dt>Last error</dt><dd style="color:var(--red)">{{ pdf.error }}</dd>{% endif %}

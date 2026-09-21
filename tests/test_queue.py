@@ -49,7 +49,7 @@ class TestQueueAPI:
     def test_cancel_completed_job_409(self, client):
         admin_client(client)
         jobs = client.get("/api/queue").json()["jobs"]
-        done = [j for j in jobs if j["status"] == "COMPLETED"]
+        done = [j for j in jobs if j["status"] == "DONE"]
         if not done:
             pytest.skip("no completed jobs yet")
         r = client.post(

@@ -9,12 +9,15 @@
 
   const KPI_DEFS = [
     ["total", "Total URLs", "k-total", "grid"],
-    ["valid", "Valid PDFs", "k-valid", "file"],
-    ["invalid", "Invalid URLs", "k-invalid", "x"],
+    ["valid", "Validated", "k-valid", "file"],
+    ["invalid", "Validation Failed", "k-invalid", "x"],
     ["processing", "Processing", "k-processing", "spin"],
-    ["published", "Published Pages", "k-published", "book"],
+    ["published", "Reference Pages Published", "k-published", "book"],
     ["discovery_pending", "Discovery Pending", "k-discovery", "search"],
-    ["crawl_checked", "Crawl Checked", "k-crawl", "eye"],
+    ["fetch_checked", "Fetch Checked", "k-crawl", "eye"],
+    ["discovery_submitted", "Discovery Submitted", "k-discovery", "search"],
+    ["discovered", "Discovered", "k-discovery", "eye"],
+    ["not_indexed", "Not Indexed", "k-unknown", "question"],
     ["indexed", "Indexed", "k-indexed", "check"],
     ["unknown", "Unknown", "k-unknown", "question"],
   ];
@@ -68,8 +71,11 @@
       case "processing": return "in the queue right now";
       case "published": return "dedicated pages live";
       case "discovery_pending": return "awaiting search engines";
-      case "crawl_checked": return "evidence-based";
-      case "indexed": return "with authoritative evidence";
+      case "fetch_checked": return "our HTTP check, not a search-engine crawl";
+      case "discovery_submitted": return "reference pages exposed for discovery";
+      case "discovered": return "independent evidence for reference page";
+      case "not_indexed": return "reference-page evidence";
+      case "indexed": return "reference pages with independent evidence";
       case "unknown": return "no evidence yet";
       default: return "";
     }

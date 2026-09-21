@@ -202,6 +202,11 @@ const App = (() => {
     DISCOVERY_PENDING: ["cyan", "Discovery Pending"],
     DISCOVERY_SUBMITTED: ["violet", "Discovery Submitted"],
     // crawl
+    FETCH_CHECKED: ["blue", "Fetch Checked"],
+    SEARCH_ENGINE_CRAWL_EVIDENCE: ["violet", "Search-engine crawl evidence"],
+    DONE: ["green", "Done"],
+    DISCOVERED: ["green", "Discovered"],
+    NOT_SUBMITTED: ["slate", "Not submitted"],
     CRAWL_UNKNOWN: ["slate", "Crawl Unknown"],
     CRAWL_OBSERVED: ["blue", "Crawl Observed"],
     CRAWL_CHECKED: ["violet", "Crawl Checked"],

@@ -21,7 +21,7 @@ log = logging.getLogger("bot_indexer.analyzer")
 
 MAX_TEXT_PAGES = 300          # never extract text from more than this many pages
 FIRST_PAGE_PREVIEW_LIMIT = 2000  # chars kept for the dedicated page
-TEXT_PDF_MIN_CHARS = 40       # below this we call it scanned/empty
+TEXT_PDF_MIN_CHARS = 1       # below this we call it scanned/empty
 
 _PDF_SIGNATURE = b"%PDF-"
 
@@ -113,7 +113,11 @@ def analyze_pdf(data: bytes) -> AnalysisResult:
         )
 
     try:
+        if doc.needs_pass:
+            return AnalysisResult(ok=False, signature_ok=True, classification="INVALID_PDF", error="Encrypted PDF requires authentication; no password bypass attempted.")
         page_count = doc.page_count
+        if not page_count:
+            return AnalysisResult(ok=False, signature_ok=True, classification="INVALID_PDF", error="PDF has no pages.")
         # PyMuPDF >=1.24: `metadata` property; older versions: get_metadata()
         meta = doc.metadata if hasattr(doc, "metadata") else (doc.get_metadata() or {})
         meta = meta or {}
@@ -129,7 +133,7 @@ def analyze_pdf(data: bytes) -> AnalysisResult:
                 text = doc[i].get_text("text") or ""
             except Exception:  # noqa: BLE001 - a damaged page should not kill analysis
                 continue
-            total_text_len += len(text)
+            total_text_len += len(text.strip())
             if i == 0:
                 text_parts.append(text[:FIRST_PAGE_PREVIEW_LIMIT])
             elif len("".join(text_parts)) < FIRST_PAGE_PREVIEW_LIMIT * 4:
@@ -180,3 +184,27 @@ def analyze_pdf(data: bytes) -> AnalysisResult:
             doc.close()
         except Exception:  # noqa: BLE001
             pass
+
+
+async def analyze_pdf_isolated(data: bytes) -> AnalysisResult:
+    """Bound native-parser memory/CPU independently of the web server."""
+    import asyncio
+    import json
+    import sys
+
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "app.pdf.analysis_worker",
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    try:
+        output, _ = await asyncio.wait_for(process.communicate(data), timeout=45)
+        if process.returncode:
+            return AnalysisResult(ok=False, error="PDF parser failed or exceeded its CPU/memory limit.")
+        return AnalysisResult(**json.loads(output))
+    except asyncio.TimeoutError:
+        return AnalysisResult(ok=False, error="PDF analysis exceeded its 45-second deadline.")
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()

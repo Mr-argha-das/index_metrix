@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote_plus
 
-import httpx
+from ..pdf.fetcher import FetchError
 
 from ..queue.manager import QueueManager
 from ..utils import utcnow_iso
@@ -24,27 +24,33 @@ log = logging.getLogger("bot_indexer.observation")
 UA = "BOT-INDEXER/1.0 (search visibility observation; non-authoritative)"
 
 
-async def _query(client: httpx.AsyncClient, query: str) -> tuple[str, str]:
+async def _query(fetcher, query: str) -> tuple[str, str]:
     """Returns (result_state, reason)."""
     url = f"https://www.google.com/search?q={quote_plus(query)}&num=20"
     try:
-        resp = await client.get(url, headers={"User-Agent": UA}, timeout=15.0)
-    except httpx.HTTPError as exc:
+        if fetcher is None:
+            return "UNKNOWN", "Safe fetcher is not configured."
+        resp = await fetcher.fetch(url, max_bytes=2 * 1024 * 1024)
+    except FetchError as exc:
         return "UNKNOWN", f"Search query failed: {exc.__class__.__name__}"
-    if resp.status_code != 200:
-        return "UNKNOWN", f"Search engine returned HTTP {resp.status_code} (query blocked)."
-    text = resp.text
+    if resp.status != 200:
+        return "UNKNOWN", f"Search engine returned HTTP {resp.status} (query blocked)."
+    text = resp.content.decode("utf-8", errors="replace")
     if "unusual traffic" in text or "captcha" in text.lower() or "sorry." in text.lower():
         return "UNKNOWN", "Search engine blocked the automated query (captcha/consent)."
     return "200", text
 
 
 def _contains_url(html: str, url: str) -> bool:
-    # Google HTML wraps targets in hrefs; check for the exact URL and a
-    # canonicalised form (www, trailing slash variants).
-    variants = {url, url.rstrip("/")}
-    for v in variants:
-        if v in html:
+    from bs4 import BeautifulSoup
+    from urllib.parse import urlsplit, parse_qs
+    # A reflected query string is not a result. Only examine actual links.
+    for link in BeautifulSoup(html, "html.parser").find_all("a", href=True):
+        href = link["href"]
+        if href.startswith("/url?"):
+            query = parse_qs(urlsplit(href).query)
+            href = (query.get("q") or query.get("url") or [""])[0]
+        if href.rstrip("/") == url.rstrip("/"):
             return True
     return False
 
@@ -55,27 +61,27 @@ async def run_observation(manager: QueueManager, pdf: dict) -> dict:
     target = pdf.get("normalized_url") or pdf.get("original_url") or ""
     domain = pdf.get("source_domain") or ""
 
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        state, detail = await _query(client, f'"{target}"')
-        if state != "200":
-            return {
-                "message": f"Search visibility observation: UNKNOWN — {detail}",
-                "metadata": {
-                    "label": "Search visibility observation (NOT authoritative)",
-                    "state": "UNKNOWN",
-                    "detail": detail,
-                    "checked_at": utcnow_iso(),
-                },
-            }
-        exact_hit = _contains_url(detail, target)
-        site_state = site_hit = None
-        if domain:
-            state2, detail2 = await _query(client, f"site:{domain} {target.rsplit('/', 1)[-1][:60]}")
-            if state2 == "200":
-                site_state = "OK"
-                site_hit = target in detail2
-            else:
-                site_state = detail2
+    # Even optional observations use robots-aware, bounded, non-spoofed HTTP.
+    state, detail = await _query(manager.fetcher, f'"{target}"')
+    if state != "200":
+        return {
+            "message": f"Search visibility observation: UNKNOWN — {detail}",
+            "metadata": {
+                "label": "Search visibility observation (NOT authoritative)",
+                "state": "UNKNOWN",
+                "detail": detail,
+                "checked_at": utcnow_iso(),
+            },
+        }
+    exact_hit = _contains_url(detail, target)
+    site_state = site_hit = None
+    if domain:
+        state2, detail2 = await _query(manager.fetcher, f"site:{domain} {target.rsplit('/', 1)[-1][:60]}")
+        if state2 == "200":
+            site_state = "OK"
+            site_hit = target in detail2
+        else:
+            site_state = detail2
 
     if exact_hit:
         overall = "OBSERVED"

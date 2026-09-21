@@ -83,7 +83,7 @@ async def lifespan(app: FastAPI):
 
     fetcher = SafeFetcher(
         settings,
-        HostRateLimiter(settings.fetch_rate_per_minute, settings.fetch_concurrency_per_host),
+        HostRateLimiter(settings.fetch_rate_per_minute, settings.fetch_concurrency_per_host, settings.fetch_host_delay_seconds),
     )
     app.state.fetcher = fetcher
 
@@ -108,6 +108,8 @@ async def lifespan(app: FastAPI):
     # -- bootstrap + housekeeping --------------------------------------------
     await bootstrap_admin_if_needed(repos, settings)
     await rebase_page_urls(repos, settings.public_base_url)
+    from .database.migrations import repair_status_semantics
+    await repair_status_semantics(repos)
     await auth.purge_expired()
     await queue.start()
 
@@ -124,12 +126,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="BOT INDEXER",
+    title="INDEX MATRIX",
     version=__version__,
     description="PDF URL validation, publishing, discovery & monitoring platform.",
     lifespan=lifespan,
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
+    docs_url=None,
+    openapi_url=None,
     redoc_url=None,
 )
 
@@ -260,7 +262,8 @@ class SecurityMiddleware:
                 headers = list(message.get("headers") or [])
                 headers.append((b"x-content-type-options", b"nosniff"))
                 headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
-                if is_page:
+                host_name = (raw_headers.get(b"host") or b"").decode("latin-1").split(":")[0]
+                if is_page and not host_name.endswith(".e2b.app"):
                     headers.append((b"x-frame-options", b"DENY"))
                 forwarded = {k.decode(): v for k, v in (scope.get("headers") or [])}
                 secure = (
@@ -288,6 +291,8 @@ class SecurityMiddleware:
                         )
                     )
                 message = {**message, "headers": headers}
+            if method == "HEAD" and message["type"] == "http.response.body":
+                message = {**message, "body": b""}
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
@@ -358,6 +363,20 @@ from .publishing.routes import (  # noqa: E402
 )
 from .users.routes import page as users_page, router as users_router  # noqa: E402
 
+from .monitoring.index_api import router as index_router
+
+@app.get("/api/openapi.json", include_in_schema=False)
+async def private_openapi(user: dict = Depends(require_admin)):
+    return app.openapi()
+
+
+@app.get("/api/docs", include_in_schema=False)
+async def private_docs(user: dict = Depends(require_admin)):
+    from fastapi.openapi.docs import get_swagger_ui_html
+    return get_swagger_ui_html(openapi_url="/api/openapi.json", title="INDEX MATRIX API")
+
+
+app.include_router(index_router)
 app.include_router(auth_router)
 app.include_router(auth_pages)
 app.include_router(users_router)
@@ -412,7 +431,11 @@ async def dashboard_stats(request: Request, user: dict = Depends(require_user)):
         "discovery_pending": count(
             lambda p: p.get("discovery_status") == "DISCOVERY_PENDING"
         ),
-        "crawl_checked": count(lambda p: p.get("crawl_status") == "CRAWL_CHECKED"),
+        "crawl_checked": count(lambda p: p.get("crawl_status") in ("CRAWL_CHECKED", "SEARCH_ENGINE_CRAWL_EVIDENCE")),
+        "fetch_checked": count(lambda p: bool(p.get("last_checked_at") or p.get("last_probe_at"))),
+        "discovery_submitted": len(page_pdfs),
+        "discovered": count(lambda p: p.get("discovery_status") == "DISCOVERED"),
+        "not_indexed": count(lambda p: p.get("index_status") == "NOT_INDEXED"),
         "indexed": indexed_with_evidence,
         "unknown": count(lambda p: p.get("index_status") == "INDEX_UNKNOWN"),
     }

@@ -156,10 +156,10 @@
       .map((p) => {
         const title = p.title || "Untitled PDF";
         return `<tr>
-          <td><div class="cell-main">${esc(title)}</div>
-            <div class="cell-sub">${esc(shortUrl(p.normalized_url))}</div></td>
-          <td class="cell-sub">${esc(p.source_domain || "—")}</td>
-          <td>${pill(p.status)}</td>
+          <td class="recent-resource"><div class="cell-main">${esc(title)}</div>
+            <div class="cell-sub recent-source-url" title="${esc(p.normalized_url || "")}">${esc(shortUrl(p.normalized_url))}</div></td>
+          <td class="cell-sub recent-source-domain">${esc(p.source_domain || "—")}</td>
+          <td>${pill(p.status)}${p.error ? `<div class="small mt-8 recent-failure"><strong>Failure reason:</strong> ${esc(p.error)}</div>` : ""}</td>
           <td>${pill(p.discovery_status)}</td>
           <td>${pill(p.crawl_status)}</td>
           <td>${pill(p.index_status)}</td>

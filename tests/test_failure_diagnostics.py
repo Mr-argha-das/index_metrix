@@ -18,6 +18,9 @@ def test_failed_resource_details_render_actual_reason(client, pdf_server_url, pa
     record = wait_for(client, '/api/index/status?url=' + source,
                       lambda row: row.get('submissionStatus') == 'VALIDATION_FAILED')
     assert reason in record['error'].lower()
+    recent = client.get('/api/dashboard/stats').json()['recent_pdfs']
+    assert recent[0]['id'] == record['id']
+    assert recent[0]['error'] == record['error']
     assert record['referencePage'] is None
     assert record['externalIndexStatus'] == record['referenceIndexStatus'] == 'UNKNOWN'
     response = client.get(f"/pdfs/{record['id']}")

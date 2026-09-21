@@ -47,12 +47,19 @@ BLOCKED_SUFFIXES = (
     ".example",
 )
 
+# RFC 6052's well-known /96 NAT64 prefix encodes an IPv4 destination in
+# its low 32 bits. Some Python versions mark the IPv6 wrapper reserved,
+# even for a public destination. Do not generalize this exception to other
+# translation/transition prefixes or skip validation of the embedded IPv4.
+_NAT64_WELL_KNOWN = ipaddress.ip_network("64:ff9b::/96")
+
 # Networks that Python's ipaddress module does not flag for us but that must
 # never be fetched from a browser-facing URL field.
 _EXTRA_BLOCKED_NETS = [
     ipaddress.ip_network("100.64.0.0/10"),   # CGNAT / shared address space
     ipaddress.ip_network("198.18.0.0/15"),   # benchmarking
     ipaddress.ip_network("2001:db8::/32"),   # documentation
+    ipaddress.ip_network("64:ff9b:1::/48"),  # network-local NAT64; not the public /96
 ]
 
 
@@ -130,6 +137,12 @@ def _host_is_blocked_name(host: str) -> str | None:
 
 
 def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> str | None:
+    if ip.version == 6 and ip in _NAT64_WELL_KNOWN:
+        target = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        reason = _ip_is_blocked(target)
+        if reason or not target.is_global:
+            return f"NAT64 destination is {reason or 'non-public IPv4'} ({target})"
+        return None
     if ip.is_unspecified:
         return "unspecified address (0.0.0.0 / ::)"
     if ip.is_loopback:

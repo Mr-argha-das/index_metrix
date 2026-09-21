@@ -104,7 +104,7 @@ When unconfigured, every integration surface reports **NOT CONFIGURED** — no f
 .venv/bin/python -m pytest tests/ -v
 ```
 
-The current full suite passes **234 tests** (2026-09-21). See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current verification and [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the historical implementation report.
+The current full suite passes **263 tests** (2026-09-21). See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current verification and [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the historical implementation report.
 
 | File | Covers |
 |---|---|
@@ -237,4 +237,15 @@ The URLs table displays the persisted **Failure reason** and a **View diagnostic
 
 A document opening through a browser or an external reader does not prove that the application's server can retrieve it. Obtain the exact stored error before changing validation or network configuration. Never disable TLS verification, SSRF checks or robots enforcement to make a status appear successful. The former MSU external sample has been replaced by an explicitly non-working URL-format placeholder rather than advertising an unverified third-party file as a working test.
 
-Diagnostics regressions: `node --test tests/frontend_auth.test.js tests/frontend_diagnostics.test.js` (9 tests), plus `tests/test_failure_diagnostics.py` (HTTP 403/404, HTML-as-PDF, readable detail pages and escaped error text).
+Diagnostics regressions: `node --test tests/frontend_auth.test.js tests/frontend_diagnostics.test.js` (10 tests), plus `tests/test_failure_diagnostics.py` (HTTP 403/404, HTML-as-PDF, readable detail pages and escaped error text).
+
+
+### NAT64 / DNS64 networks (including some ChromeOS Linux setups)
+
+An address such as `64:ff9b::2309:253c` represents IPv4 `35.9.37.60` inside the standard NAT64 well-known prefix `64:ff9b::/96`. The validator now checks the embedded IPv4 against all SSRF restrictions and additionally requires it to be globally routable, rather than rejecting this entire IPv6 wrapper as reserved. It preserves the validated IPv6 address for DNS pinning and connectivity on IPv6-only networks.
+
+This is **not** a blanket IPv6 exemption: translated private, loopback, metadata, CGNAT, multicast, reserved and documentation targets remain blocked. The local-use `64:ff9b:1::/48` prefix is not exempted. Every DNS answer and redirect remains validated. Keep `ALLOW_PRIVATE_TARGETS=false`.
+
+After updating and restarting the app, use **URLs → Details → Retry processing** on a record previously rejected for a public NAT64 address. Adding the same URL again is deduplicated and does not retry it. Fixing this DNS false positive does not guarantee that the later HTTP, robots or content checks will succeed.
+
+The dashboard now includes the actual failure reason in Recent URLs and keeps hostnames/URLs readable in the horizontally scrollable table. Regression coverage includes the reported MSU address, mixed A/AAAA responses, blocked embedded targets, DNS pinning and redirect protection (`tests/test_nat64.py`).

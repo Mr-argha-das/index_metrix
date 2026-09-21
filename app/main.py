@@ -406,7 +406,7 @@ INVALID_STATES = ("INVALID", "PDF_INVALID", "PDF_ANALYSIS_FAILED", "FAILED")
 @app.get("/api/dashboard/stats", tags=["dashboard"])
 async def dashboard_stats(request: Request, user: dict = Depends(require_user)):
     repos: Repos = request.app.state.repos
-    pdfs = await repos.pdfs.all()
+    pdfs = await repos.pdfs.all(order="-id")
     if user.get("role") != "ADMIN":
         pdfs = [p for p in pdfs if p.get("user_id") == user.get("id")]
         my_ids = {p["id"] for p in pdfs}
@@ -467,7 +467,7 @@ async def dashboard_stats(request: Request, user: dict = Depends(require_user)):
             k: p.get(k)
             for k in (
                 "id", "title", "normalized_url", "source_domain", "status",
-                "discovery_status", "crawl_status", "index_status", "updated_at",
+                "discovery_status", "crawl_status", "index_status", "updated_at", "error",
             )
         }
         for p in pdfs[:8]

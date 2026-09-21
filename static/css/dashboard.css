@@ -85,3 +85,11 @@
 }
 .qm .qm-num { font-size: 20px; font-weight: 750; letter-spacing: -0.02em; }
 .qm .qm-lbl { font-size: 11px; color: var(--muted); font-weight: 600; }
+
+/* Keep recent-resource URLs readable; scroll the table rather than forcing
+   hostnames and URL paths into one-character columns. */
+.recent-urls-table { min-width: 1080px; }
+.recent-urls-table .recent-resource { min-width: 230px; max-width: 300px; }
+.recent-urls-table .recent-source-url { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recent-urls-table .recent-source-domain { min-width: 145px; white-space: nowrap; }
+.recent-urls-table .recent-failure { min-width: 190px; max-width: 300px; color: var(--red); overflow-wrap: anywhere; }

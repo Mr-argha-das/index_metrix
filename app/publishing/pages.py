@@ -1,8 +1,8 @@
-"""Dedicated-page generation for validated PDFs.
+"""Owned publication: fictional job demos for new validated sources.
 
-Each valid PDF gets one useful, SEO-complete page on OUR domain
-(``/pdf/<slug>``). The page links to the original third-party PDF with a
-normal ``<a>`` tag and never pretends to host the file.
+Existing /pdf/<slug> references retain their real source-only presentation.
+New /jobs/<number> pages clearly separate fictional job examples from actual
+source metadata and normal source links. No genuine vacancy is asserted.
 """
 from __future__ import annotations
 
@@ -17,21 +17,27 @@ log = logging.getLogger("bot_indexer.pages")
 MAX_SLUG_LEN = 72
 
 
-def public_page_url(base_url: str, slug: str) -> str:
+def public_page_path(page: dict) -> str:
+    if page.get("page_kind") == "demo-job":
+        return f"/jobs/{int(page['job_number'])}"
+    return f"/pdf/{page['slug']}"
+
+
+def public_page_url(base_url: str, page: dict | str) -> str:
     """Return the current canonical URL for a dedicated page.
 
     Page URLs are derived data. Recomputing them from the active public origin
     keeps pages published before a domain move out of the sitemap, RSS and
     canonical metadata under their former hostname.
     """
-    return f"{base_url.rstrip('/')}/pdf/{slug}"
+    return base_url.rstrip("/") + public_page_path(page if isinstance(page, dict) else {"slug": page})
 
 
 async def rebase_page_urls(repos: Repos, base_url: str) -> int:
     """Persist the current canonical origin on previously published pages."""
     updated = 0
     for page in await repos.pages.all():
-        desired_url = public_page_url(base_url, page["slug"])
+        desired_url = public_page_url(base_url, page)
         if page.get("page_url") != desired_url:
             await repos.pages.update(page["id"], page_url=desired_url)
             updated += 1
@@ -68,6 +74,11 @@ def make_slug(base: str, normalized_url: str) -> str:
 def page_description(analysis: AnalysisResult | None, pdf: dict, url: str) -> str:
     """Generate an honest, useful description for the dedicated page and RSS."""
     domain = pdf.get("source_domain") or "unknown source"
+    if pdf.get("resource_type") == "HTML":
+        from ..utils import json_loads
+        html = json_loads(pdf.get("html_metadata"), {}) or {}
+        summary = html.get("description") or pdf.get("first_page_text") or "Text preview unavailable."
+        return truncate(f"HTML reference from {domain}. {summary}", 300)
     parts = []
     title = (analysis.title if analysis else None) or (pdf.get("title") or "PDF document")
     parts.append(f"Validated PDF reference for “{title}” from {domain}.")
@@ -95,6 +106,12 @@ async def create_page_for_pdf(
         page = existing[0]
         title = truncate((analysis.title if analysis else None) or pdf.get("title") or page["title"], 200)
         description = page_description(analysis, pdf, pdf["normalized_url"])
+        if page.get("page_kind") == "demo-job":
+            from .demo_jobs import demo_title, demo_description
+            from ..utils import json_loads
+            job = json_loads(page["demo_job"], {})
+            description = demo_description(job, (analysis.title if analysis else None) or pdf.get("title"))
+            title = demo_title(job)
         if title != page["title"] or description != page["description"] or page.get("pdf_sha256") != pdf.get("sha256"):
             page = await repos.pages.update(page["id"], title=title, description=description, pdf_sha256=pdf.get("sha256"))
         return page
@@ -109,15 +126,21 @@ async def create_page_for_pdf(
         n += 1
 
     base_url = settings.public_base_url
-    title = (analysis.title if analysis else None) or pdf.get("title") or f"{base.replace('-', ' ')} — PDF from {pdf.get('source_domain')}"
-    description = page_description(analysis, pdf, pdf["normalized_url"])
+    from .demo_jobs import generate_demo_job, demo_title, demo_description
+    number = await repos.settings.reserve_counter("internal_next_demo_job")
+    job = generate_demo_job(number)
+    title = demo_title(job)
+    description = demo_description(job, (analysis.title if analysis else None) or pdf.get("title"))
     now = utcnow_iso()
 
     page = await repos.pages.insert(
         pdf_id=pdf["id"],
         pdf_sha256=pdf.get("sha256"),
         slug=slug,
-        page_url=public_page_url(base_url, slug),
+        page_kind="demo-job",
+        job_number=number,
+        demo_job=json_dumps(job),
+        page_url=public_page_url(base_url, {"page_kind": "demo-job", "job_number": number}),
         title=truncate(title, 200),
         description=description,
         published_at=now,
@@ -127,7 +150,7 @@ async def create_page_for_pdf(
     )
     await repos.events.add(
         "PAGE_CREATED",
-        f"Dedicated page published: /pdf/{slug}",
+        f"Fictional demo page published: /jobs/{number}",
         pdf_id=pdf["id"],
         status="SUCCESS",
         metadata={"slug": slug, "page_url": page["page_url"]},
@@ -156,10 +179,14 @@ def build_pdf_page_context(pdf: dict, page: dict, analysis: AnalysisResult | Non
         except Exception:  # noqa: BLE001
             return str(value)
 
-    canonical_url = public_page_url(settings.public_base_url, page["slug"])
+    canonical_url = public_page_url(settings.public_base_url, page)
+    resource_type = pdf.get("resource_type") or "PDF"
     return {
         "pdf": jsonable(pdf),
+        "resource_type": resource_type,
+        "html_metadata": json_loads(pdf.get("html_metadata"), {}) or {},
         "page": jsonable(page),
+        "demo_job": json_loads(page.get("demo_job"), {}) if page.get("page_kind") == "demo-job" else None,
         "app_name": settings.app_name,
         "base_url": settings.public_base_url,
         "title": page.get("title") or "PDF document",
@@ -201,7 +228,7 @@ def build_pdf_page_context(pdf: dict, page: dict, analysis: AnalysisResult | Non
                 "datePublished": page.get("published_at"),
                 "dateModified": page.get("updated_at"),
                 "about": {
-                    "@type": "DigitalDocument",
+                    "@type": "WebPage" if resource_type == "HTML" else "DigitalDocument",
                     "name": pdf.get("title") or page.get("title"),
                     "url": pdf.get("original_url"),
                     "contentUrl": pdf.get("original_url"),

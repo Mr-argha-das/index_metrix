@@ -1,8 +1,12 @@
+> **Google capability decision (2026-09-21):** there is no generic public API to request indexing of arbitrary owned URLs. INDEX MATRIX uses normal discovery: public reference pages, the new `/references` HTML library, sitemap, RSS and robots. Direct request-indexing is explicitly `UNSUPPORTED`; no Google request is made by publication. See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current official sources, API/scopes/quotas distinctions, implementation and verification. Earlier implementation reports are historical.
+
 # INDEX MATRIX
 
-**FastAPI platform for third-party PDF URL validation, publishing, discovery and monitoring.**
+> **Current publication mode: fictional job demos.** New validated submissions create `/jobs/<number>` with saved, clearly labelled fictional details and a separate original-source link. Applications are disabled; no real vacancy, “official job PDF” or Google JobPosting eligibility is asserted. Existing `/pdf/<slug>` references remain unchanged. See [DEMO_JOBS.md](DEMO_JOBS.md) for behavior, compatibility and verification.
 
-You submit external PDF URLs. INDEX MATRIX fetches them safely (SSRF-protected), validates and analyzes the PDF, publishes a useful SEO-complete dedicated page **on our own site** (with a clear link to the original file), exposes the pages through `sitemap.xml` + `rss.xml` so search engines can discover them, and honestly tracks discovery/crawl/index states — never claiming indexing without authoritative evidence.
+**FastAPI platform for third-party PDF and HTML resource validation, publishing, discovery and monitoring.**
+
+You submit external PDF or HTML/blog URLs. INDEX MATRIX fetches them safely (SSRF-protected), validates and analyzes the resource, publishes a useful SEO-complete dedicated page **on our own site** (with a clear link to the original file), exposes the pages through the public `/references` library, `sitemap.xml` + `rss.xml` so search engines can discover them, and honestly tracks discovery/crawl/index states — never claiming indexing without authoritative evidence.
 
 ---
 
@@ -12,14 +16,16 @@ You submit external PDF URLs. INDEX MATRIX fetches them safely (SSRF-protected),
 |---|---|
 | **Validation** | http/https only; scheme, host and IP checks; **SSRF protection on every redirect hop** (localhost, private, loopback, link-local, metadata `169.254.169.254`, internal name blocks); DNS-rebinding defence (pinned resolver); max 5 redirects; 10 s connect / 30 s read timeouts; 35 MB cap |
 | **Fetch** | Honest user agent `BOT-INDEXER/1.0` — our fetch is a *technical fetch*, never labelled as a Googlebot crawl |
-| **Analysis** | `%PDF-` magic-byte signature check (HTML masquerading as PDF is rejected), PyMuPDF structure/metadata extraction (title, author, pages, text), SHA-256 fingerprint, TEXT_PDF vs SCANNED_OR_EMPTY_PDF classification |
-| **Publishing** | One dedicated page per valid PDF at `/pdf/<slug>` — metadata, first-page preview excerpt, canonical URL, Open Graph, **valid JSON-LD** (schema.org `WebPage`/`DigitalDocument`), and a plain-HTML “View Original PDF” link (`rel="noopener"`, no JS). The file is **not re-hosted** — we never copy the document, we link to it |
-| **Discovery** | `sitemap.xml` (our pages only, real `lastmod`, never third-party URLs), `rss.xml` (real `pubDate`), `robots.txt` declaring the sitemap |
+| **Analysis** | `%PDF-` magic-byte signature check (HTML masquerading as PDF is rejected), PyMuPDF structure/metadata extraction (title, author, pages, text), SHA-256 fingerprint, TEXT_PDF vs SCANNED_OR_EMPTY_PDF classification; useful HTML title/metadata/text extraction without executing scripts |
+| **Publishing** | One owned page per valid PDF or useful HTML article (new fictional demos at `/jobs/<number>`; legacy references at `/pdf/<slug>`) — metadata, first-page preview excerpt, canonical URL, Open Graph, **valid JSON-LD** (schema.org `WebPage`/`DigitalDocument`), and a plain-HTML original-resource link (`rel="noopener"`, no JS). The file is **not re-hosted** — we never copy the document, we link to it |
+| **Discovery** | Public paginated `/references` HTML links; `sitemap.xml` (our pages only, real `lastmod`, never third-party URLs), `rss.xml` (real `pubDate`), `robots.txt` declaring the sitemap |
 | **Queue** | In-process async queue, concurrency ≤ 5, 3 retries with exponential backoff (5 s × 2ⁿ, capped 300 s), crash recovery on restart |
 | **Monitoring** | **Technical Server Probe** (explicitly labelled “NOT evidence of any Google crawl”), Search Console URL Inspection for *authorized properties only*; index status changes **only** with recorded authoritative evidence |
 | **Integrations** | Google Search Console (JWT RS256 service account, **no Indexing API** as a generic submission tool) and Bing Webmaster — both optional; when absent they report `NOT CONFIGURED`, they never fabricate results |
 
 ### Honest status model
+
+The API now exposes independent `referenceSubmissionStatus`, `referenceCrawlStatus`, `referenceIndexStatus`, `externalDiscoveryStatus`, `externalCrawlStatus` and `externalIndexStatus`. The normal-discovery fallback marks direct arbitrary-URL request-indexing **UNSUPPORTED**, never QUEUED/ACCEPTED. Source fetching is not reference crawl evidence; reference indexing does not establish external indexing. Older fields below remain for compatibility.
 
 - `discovery_status`: `DISCOVERY_PENDING` until an authorized property confirms discovery — we cannot force or verify discovery for third-party domains.
 - `crawl_status`: ordinary HTTP checks produce `FETCH_CHECKED`, **not** search-engine evidence. Authorized Search Console crawl timestamps can produce `SEARCH_ENGINE_CRAWL_EVIDENCE` for the reference page.
@@ -55,6 +61,11 @@ cp .env.example .env
 ```
 
 On first startup an admin account is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (bootstrap runs exactly once). Log in at `http://localhost:8000/login`.
+
+Embedded previews support browsers that block cookies and browser storage: the client keeps the session in memory and uses single-use, session-bound handoffs for protected page navigation. Authenticated handoff pages are private/no-store and remove the short-lived grant from the address bar. No reusable session token is placed in a URL. Logout revokes outstanding grants tied to that session. When all persistent storage is blocked, a full reload can require signing in again; opening the preview in a separate tab avoids many embedded-browser restrictions.
+
+Frontend authentication regressions (no npm dependencies): `node --test tests/frontend_auth.test.js` — **8 tests** covering blocked storage, navigation, logout, handoff failure and redirect safety.
+
 
 ### Development without production settings
 
@@ -93,7 +104,7 @@ When unconfigured, every integration surface reports **NOT CONFIGURED** — no f
 .venv/bin/python -m pytest tests/ -v
 ```
 
-The current full suite passes **195 tests** (2026-09-21). See [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for exact verification commands, limitations, and production results.
+The current full suite passes **234 tests** (2026-09-21). See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current verification and [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the historical implementation report.
 
 | File | Covers |
 |---|---|
@@ -195,8 +206,7 @@ responses defer/fail rather than bypass controls. Robots responses are capped at
 512 KiB and cached for up to one hour (512 origins). Native PDF parsing is isolated
 in a child process with **512 MiB address space, 30s CPU and 45s wall-time limits**
 on Linux. PDFs requiring passwords are not decrypted. No OCR is performed;
-text extraction inspects at most 300 pages. HTML responses get bounded diagnostic
-metadata extraction and are rejected as PDFs; no HTML reference pages are published.
+text extraction inspects at most 300 pages. Useful HTML/blog responses now receive bounded extraction and accurately labeled reference pages. Thin, noindex, challenge and HTML-masquerading-as-PDF responses are not published.
 
 ### Deploy and verify
 
@@ -219,3 +229,12 @@ from HEAD after deployment, including one real `/pdf/{slug}` returned by the sta
 A request with `User-Agent: Googlebot` is only a **googlebot-like HTTP test**, never
 Googlebot verification or indexing evidence. See the implementation report for the
 production TLS error encountered from this sandbox; production acceptance is pending.
+
+
+### Diagnosing INVALID / failed sources
+
+The URLs table displays the persisted **Failure reason** and a **View diagnostics** link. The authenticated detail page includes Last error, HTTP status, final URL and the event timeline. An HTTP rejection, connection problem, unavailable robots policy and invalid PDF bytes are different failures; an INVALID badge alone does not establish the cause or prove the URL is permanently broken. Network failures normally retry and eventually become FAILED, while a missing PDF signature yields PDF_INVALID.
+
+A document opening through a browser or an external reader does not prove that the application's server can retrieve it. Obtain the exact stored error before changing validation or network configuration. Never disable TLS verification, SSRF checks or robots enforcement to make a status appear successful. The former MSU external sample has been replaced by an explicitly non-working URL-format placeholder rather than advertising an unverified third-party file as a working test.
+
+Diagnostics regressions: `node --test tests/frontend_auth.test.js tests/frontend_diagnostics.test.js` (9 tests), plus `tests/test_failure_diagnostics.py` (HTTP 403/404, HTML-as-PDF, readable detail pages and escaped error text).

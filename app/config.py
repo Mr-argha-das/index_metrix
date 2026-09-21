@@ -99,6 +99,10 @@ class Settings(BaseSettings):
         self.public_base_url = (
             self.public_base_url or "https://v1.indexmetrix.com"
         ).rstrip("/")
+        from urllib.parse import urlsplit
+        origin = urlsplit(self.public_base_url)
+        if origin.scheme not in ("http", "https") or not origin.hostname or origin.username or origin.password or origin.query or origin.fragment or origin.path not in ("", "/"):
+            raise ValueError("PUBLIC_BASE_URL must be an HTTP(S) origin without credentials, path, query or fragment.")
         self.app_env = (self.app_env or "development").lower()
         if self.app_env == "test":
             # Automated tests spin up a local PDF server; allow loopback there.

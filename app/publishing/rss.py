@@ -5,6 +5,8 @@ bumped without an actual change.
 """
 from __future__ import annotations
 
+from .pages import public_page_url
+
 from email.utils import formatdate
 from xml.sax.saxutils import escape as _escape
 
@@ -37,7 +39,7 @@ def render_rss(pages: list[dict], settings, limit: int | None = None) -> str:
         if not _pubdate(p.get("published_at")):
             continue  # no fabricated publication dates
         # Keep every feed entry canonical when the public domain changes.
-        link = f"{base.rstrip('/')}/pdf/{p.get('slug')}"
+        link = public_page_url(base, p)
         guid = link
         items.append(
             "  <item>\n"
@@ -53,10 +55,10 @@ def render_rss(pages: list[dict], settings, limit: int | None = None) -> str:
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
         "  <channel>\n"
-        f"    <title>{escape(settings.app_name)} — Published PDF pages</title>\n"
+        f"    <title>{escape(settings.app_name)} — Published reference pages</title>\n"
         f"    <link>{escape(base)}</link>\n"
         f"    <atom:link href=\"{escape(base + '/rss.xml')}\" rel=\"self\" type=\"application/rss+xml\"/>\n"
-        f"    <description>RSS feed of dedicated pages for validated PDF documents, published on {escape(settings.app_name)}.</description>\n"
+        f"    <description>Clearly labelled fictional job demos and source reference pages, published on {escape(settings.app_name)}.</description>\n"
         f"    <language>en</language>\n"
         f"{build_tag}"
         + "\n".join(items)

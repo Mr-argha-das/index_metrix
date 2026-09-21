@@ -92,6 +92,9 @@ async def _submit_urls(
                 discovery_status="NOT_SUBMITTED", discovery_channels="[]",
                 crawl_status="CRAWL_UNKNOWN", index_status="INDEX_UNKNOWN",
                 source_index_status="INDEX_UNKNOWN", index_evidence="", crawl_evidence="",
+                reference_submission_status="NOT_REQUESTED", reference_crawl_status="UNKNOWN",
+                reference_index_status="UNKNOWN", external_discovery_status="NOT_SUBMITTED",
+                external_crawl_status="UNKNOWN", external_index_status="UNKNOWN",
                 created_at=now, updated_at=now,
             )
         pdfs = await repos.pdfs.insert_many(list(pending.values()))
@@ -200,6 +203,8 @@ async def api_list_pdfs(
     page_by_pdf = {p["pdf_id"]: p for p in pages}
     for item in items:
         item["page"] = page_by_pdf.get(item["id"])
+        from ..monitoring.resource_states import resource_states
+        item["states"] = resource_states(item, bool(item["page"]))
     return {"items": items, "total": total, "page": page, "per_page": per_page}
 
 

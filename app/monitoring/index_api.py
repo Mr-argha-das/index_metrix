@@ -12,7 +12,8 @@ from ..auth.routes import require_admin, require_user
 from ..pdf.routes import PdfIn, _submit_urls
 from ..pdf.validator import URLValidationError, normalize_url
 from ..utils import json_dumps, json_loads, utcnow_iso
-from ..publishing.pages import public_page_url
+from ..publishing.pages import public_page_url, public_page_path
+from .resource_states import resource_states
 
 router = APIRouter(prefix="/api/index", tags=["index"])
 
@@ -35,16 +36,23 @@ def status_record(pdf: dict, page: dict | None, base: str) -> dict:
     return {
         "id": pdf["id"], "url": pdf["normalized_url"], "sourceUrl": pdf["original_url"],
         "finalUrl": pdf.get("final_url"), "sourceDomain": pdf.get("source_domain"),
-        "type": "PDF" if pdf.get("sha256") else "HTML" if pdf.get("html_metadata") else "UNKNOWN",
+        "type": pdf.get("resource_type") or ("PDF" if pdf.get("sha256") else "HTML" if pdf.get("html_metadata") else "UNKNOWN"),
+        "redirectChain": json_loads(pdf.get("redirect_chain"), []) or [],
+        "declaredContentLength": pdf.get("declared_content_length"),
         "classification": pdf.get("classification"), "httpStatus": pdf.get("http_status"),
         "contentType": pdf.get("content_type"), "pages": pdf.get("page_count"),
         "sizeBytes": pdf.get("content_length"), "sha256": pdf.get("sha256"),
         "title": (page or {}).get("title") or pdf.get("title"),
+        "sourceTitle": pdf.get("title"),
         "description": (page or {}).get("description"),
         "textLength": pdf.get("text_length"), "excerpt": pdf.get("first_page_text"),
-        "canonical": public_page_url(base, page["slug"]) if page else None,
-        "referencePage": public_page_url(base, page["slug"]) if page else None,
+        "canonical": public_page_url(base, page) if page else None,
+        "referencePage": public_page_url(base, page) if page else None,
         "referenceId": page["slug"] if page else None,
+        "referencePath": public_page_path(page) if page else None,
+        "pageKind": (page or {}).get("page_kind") or "reference",
+        "jobId": (page or {}).get("job_number"),
+        "isFictionalDemo": (page or {}).get("page_kind") == "demo-job",
         "publishedAt": (page or {}).get("published_at"), "updatedAt": (page or pdf).get("updated_at"),
         "validatedAt": pdf.get("validated_at"), "lastChecked": pdf.get("last_checked_at") or pdf.get("last_probe_at"),
         "submissionStatus": submission,
@@ -60,6 +68,7 @@ def status_record(pdf: dict, page: dict | None, base: str) -> dict:
         "sourceIndexEvidence": json_loads(pdf.get("source_index_evidence"), {}) or {},
         "robotsCheck": json_loads(pdf.get("robots_check"), []) or [],
         "htmlMetadata": json_loads(pdf.get("html_metadata"), {}) or {}, "error": pdf.get("error"),
+        **resource_states(pdf, bool(page)),
     }
 
 
@@ -108,6 +117,14 @@ async def status(request: Request, url: str | None = None, page: int = Query(1, 
         "notIndexed": sum(r["indexStatus"] == "NOT_INDEXED" for r in records),
         "unknown": sum(r["indexStatus"] == "UNKNOWN" for r in records),
     }
+    summary.update({
+        "submissionQueued": sum(r["referenceSubmissionStatus"] == "QUEUED" for r in records),
+        "submissionAccepted": sum(r["referenceSubmissionStatus"] == "ACCEPTED" for r in records),
+        "submissionFailed": sum(r["referenceSubmissionStatus"] == "FAILED" for r in records),
+        "submissionUnsupported": sum(r["referenceSubmissionStatus"] == "UNSUPPORTED" for r in records),
+        "externalDiscoveryPending": sum(r["externalDiscoveryStatus"] == "DISCOVERY_PENDING" for r in records),
+        "externalDiscovered": sum(r["externalDiscoveryStatus"] == "DISCOVERED" for r in records),
+    })
     return {"items": records[(page - 1) * per_page:page * per_page], "total": len(records),
             "page": page, "perPage": per_page, "summary": summary, "indexTarget": "reference-page"}
 
@@ -135,9 +152,11 @@ async def evidence(payload: EvidenceIn, request: Request, user: dict = Depends(r
              "details": payload.details.strip(), "operatorId": user["id"], "checkedAt": utcnow_iso(),
              "verification": "Operator attestation, not automatically verified by INDEX MATRIX"}
     state = "INDEXED" if payload.indexed else "NOT_INDEXED"
-    fields = {"source_index_status": state, "source_index_evidence": json_dumps(proof)}
+    fields = {"source_index_status": state, "external_index_status": state, "source_index_evidence": json_dumps(proof)}
+    if payload.indexed:
+        fields.update(external_discovery_status="DISCOVERED", external_discovery_evidence=json_dumps(proof))
     if target == "reference-page":
-        fields = {"index_status": state, "index_evidence": json_dumps(proof)}
+        fields = {"index_status": state, "reference_index_status": state, "index_evidence": json_dumps(proof)}
         if payload.indexed:
             fields["discovery_status"] = "DISCOVERED"
     await request.app.state.repos.pdfs.update(record["id"], **fields)

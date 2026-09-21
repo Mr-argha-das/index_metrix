@@ -261,7 +261,10 @@ class SecurityMiddleware:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers") or [])
                 headers.append((b"x-content-type-options", b"nosniff"))
-                headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
+                if not any(k.lower() == b"referrer-policy" for k, _ in headers):
+                    headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
+                if path.startswith("/api/auth/"):
+                    headers.append((b"cache-control", b"no-store"))
                 host_name = (raw_headers.get(b"host") or b"").decode("latin-1").split(":")[0]
                 if is_page and not host_name.endswith(".e2b.app"):
                     headers.append((b"x-frame-options", b"DENY"))
@@ -395,7 +398,7 @@ app.include_router(integrations_page)
 # Dashboard
 # ---------------------------------------------------------------------------
 
-VALID_CLASSIFICATIONS = ("TEXT_PDF", "SCANNED_OR_EMPTY_PDF")
+VALID_CLASSIFICATIONS = ("TEXT_PDF", "SCANNED_OR_EMPTY_PDF", "HTML")
 PROCESSING_STATES = ("RECEIVED", "VALIDATING", "PDF_ANALYZING", "PAGE_GENERATING")
 INVALID_STATES = ("INVALID", "PDF_INVALID", "PDF_ANALYSIS_FAILED", "FAILED")
 
@@ -423,6 +426,10 @@ async def dashboard_stats(request: Request, user: dict = Depends(require_user)):
         lambda p: p.get("index_status") == "INDEXED" and (p.get("index_evidence") or "")
     )
     stats = {
+        "submission_queued": count(lambda p: p.get("reference_submission_status") == "QUEUED"),
+        "submission_accepted": count(lambda p: p.get("reference_submission_status") == "ACCEPTED"),
+        "submission_failed": count(lambda p: p.get("reference_submission_status") == "FAILED"),
+        "submission_unsupported": count(lambda p: p.get("reference_submission_status") == "UNSUPPORTED"),
         "total": len(pdfs),
         "valid": count(lambda p: p.get("classification") in VALID_CLASSIFICATIONS),
         "invalid": count(lambda p: p.get("status") in INVALID_STATES),
@@ -659,7 +666,7 @@ async def home(request: Request):
     user = await get_session_user(request)
     if user:
         return RedirectResponse("/dashboard", status_code=302)
-    return RedirectResponse("/login", status_code=302)
+    return RedirectResponse("/references", status_code=302)
 
 
 class _StaticFiles(StaticFiles):

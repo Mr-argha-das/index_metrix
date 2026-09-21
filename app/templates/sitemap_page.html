@@ -20,7 +20,7 @@
         <tbody>
           {% for p in pages %}
           <tr>
-            <td class="mono small"><a href="/pdf/{{ p.slug }}" target="_blank" rel="noopener">{{ base_url }}/pdf/{{ p.slug }}</a></td>
+            <td class="mono small"><a href="{{ reference_path(p) }}" target="_blank" rel="noopener">{{ base_url }}{{ reference_path(p) }}</a></td>
             <td>{{ p.title }}</td>
             <td class="cell-sub">{{ p.published_at }}</td>
             <td class="cell-sub">{{ p.updated_at }}</td>

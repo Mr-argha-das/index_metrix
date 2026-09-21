@@ -1,13 +1,15 @@
 {% extends "base.html" %}
 {% set title = "Add URLs" %}
-{% set subtitle = "Add third-party PDF URLs for validation and publishing" %}
+{% set subtitle = "Validate source URLs and publish clearly labelled fictional job demos" %}
 {% set nav = "submit" %}
 {% block content %}
+<div class="card mb-16"><div class="card-body"><strong>New publication format: /jobs/&lt;number&gt;</strong>
+<p>After a source passes validation, the app generates and saves a <strong>fictional job demo</strong> with a normal link to that source. Demo details are not extracted job facts, and applications are disabled. Existing published reference pages remain unchanged.</p></div></div>
 <div class="dash-grid">
   <div class="col">
     <div class="card">
       <div class="card-head">
-        <div><h3>Paste PDF URLs</h3><div class="sub">one URL per line, or comma separated</div></div>
+        <div><h3>Paste PDF or article URLs</h3><div class="sub">one URL per line, or comma separated</div></div>
       </div>
       <div class="card-body">
         <div class="field">
@@ -40,16 +42,16 @@
           <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">VALIDATED</div><div class="tl-msg">Scheme, host, DNS and private-IP checks (SSRF protection, every redirect).</div></div>
           <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">PDF CHECKED</div><div class="tl-msg">Content-Type + <span class="mono">%PDF-</span> signature; never trust headers alone.</div></div>
           <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">ANALYZED</div><div class="tl-msg">PyMuPDF extracts pages, metadata, SHA-256, text preview.</div></div>
-          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">PAGE PUBLISHED</div><div class="tl-msg">A useful dedicated page on our site, with a normal link to the original PDF.</div></div>
+          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">PAGE PUBLISHED</div><div class="tl-msg">A clearly labelled fictional demo at /jobs/&lt;number&gt;, with actual source metadata and an ordinary source link. No real vacancy is asserted.</div></div>
           <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">DISCOVERY PENDING</div><div class="tl-msg">Page added to sitemap.xml + rss.xml; search engines may discover it — not guaranteed.</div></div>
         </div>
       </div>
     </div>
     <div class="card">
-      <div class="card-head"><div><h3>Sample</h3></div></div>
+      <div class="card-head"><div><h3>URL format example</h3></div></div>
       <div class="card-body">
-        <div class="code-block">http://www.egr.msu.edu/decs/sites/default/files/webform/poster_print_request/_sid_/nainaxcvv-renew-2.pdf</div>
-        <p class="small faint mt-8">Paste any reachable third-party PDF. The sample above is external and may disappear — the app handles failures gracefully.</p>
+        <div class="code-block">https://your-public-site.example/documents/source.pdf</div>
+        <p class="small faint mt-8">This is a placeholder, not a working test URL. Replace it with a reachable public PDF or article. Browser access does not guarantee server access; failed rows show the actual failure reason.</p>
       </div>
     </div>
   </div>

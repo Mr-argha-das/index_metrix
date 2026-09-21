@@ -1,0 +1,31 @@
+<section aria-labelledby="demo-details-title" class="card mb-16">
+  <div class="card-head"><div><h2 id="demo-details-title">Fictional job details</h2><div class="sub">Generated example · not a recruitment advertisement</div></div></div>
+  <div class="card-body">
+    <p>{{ demo_job.description }}</p>
+    <dl class="meta-list">
+      <dt>Demo ID</dt><dd>#{{ demo_job.number }}</dd>
+      <dt>Job role</dt><dd>{{ demo_job.role }}</dd>
+      <dt>Fictional company</dt><dd>{{ demo_job.company }} — invented for this example</dd>
+      <dt>Department</dt><dd>{{ demo_job.department }}</dd>
+      <dt>Experience example</dt><dd>{{ demo_job.experience }}</dd>
+      <dt>Location example</dt><dd>{{ demo_job.location }}</dd>
+      <dt>Work mode example</dt><dd>{{ demo_job.workMode }}</dd>
+      <dt>Employment example</dt><dd>{{ demo_job.employmentType }}</dd>
+      <dt>Illustrative salary</dt><dd>{{ demo_job.salary }}</dd>
+      <dt>Sample qualification</dt><dd>{{ demo_job.qualification }}</dd>
+    </dl>
+    <h3>Example responsibilities</h3>
+    <ul>{% for task in demo_job.responsibilities %}<li>{{ task }}</li>{% endfor %}</ul>
+    <h3>Illustrative skills</h3>
+    <div class="flex wrap">{% for skill in demo_job.skills %}<span class="pill slate">{{ skill }}</span>{% endfor %}</div>
+    <h3>Sample benefits</h3>
+    <ul>{% for benefit in demo_job.benefits %}<li>{{ benefit }}</li>{% endfor %}</ul>
+    <hr class="divider">
+    <section id="demo-apply" aria-labelledby="demo-apply-title">
+      <h3 id="demo-apply-title">Apply — demo only</h3>
+      <p>No vacancy exists for this generated example. Applications are not accepted, and no CV, payment or personal information is collected.</p>
+      <button type="button" class="btn btn-secondary" disabled>Applications disabled — fictional demo</button>
+      <p class="small faint">If the separately linked source describes a real opportunity, verify its publisher, eligibility and application instructions independently. Its contents are not represented by the generated details above.</p>
+    </section>
+  </div>
+</section>

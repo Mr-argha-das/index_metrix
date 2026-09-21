@@ -1,10 +1,27 @@
 # INDEX MATRIX — implementation and verification report
 
-**Date:** 2026-09-21 UTC  
-**Checkout:** `Mr-argha-das/index_metrix`  
+> **Latest selected mode:** clearly labelled fictional demo jobs at `/jobs/<number>` for new validated submissions. See [DEMO_JOBS.md](DEMO_JOBS.md) for current changes and tests. Previous real-source-only reference pages are retained, and no Indexing API/JobPosting eligibility is implied.
+
+**Date:** 2026-09-21 UTC\
+**Checkout:** `Mr-argha-das/index_metrix`\
 **Branch:** `arena/01a0c3af-index-metrix`
 
-## Outcome
+## Current follow-up: official Google decision and normal discovery
+
+The official-documents check and implementation after this baseline are recorded in **[GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md)**. That report supersedes the HTML-diagnostics-only scope and test count below.
+
+- No supported generic request-indexing API exists for arbitrary owned PDF/blog/reference pages. Restricted Indexing API, read-only inspection and sitemap discovery are documented separately with official endpoints, scopes, permissions and quotas.
+- No automatic Google integration was added. Publication records `UNSUPPORTED` for direct request-indexing, `normal-discovery` and `googleRequestMade: false`; no new Google credentials are required.
+- New public `/references` GET/HEAD library and ordinary pagination/internal links complement existing sitemap/RSS/robots discovery.
+- Useful HTML articles now publish accurately labeled reference pages, alongside PDFs; thin/noindex/challenge/fake-PDF responses are rejected.
+- Independent reference submission/crawl/index and external discovery/crawl/index fields are persisted, migrated, exposed in API/UI and tested for isolation.
+- Current full suite: **211 passed**, two existing dependency warnings; focused fallback suite: **16 passed**. Python compilation, all frontend JS syntax checks and whitespace checks pass.
+- Current local running-server GET/HEAD checks pass for the library, robots, sitemap, RSS, PDF reference and HTML reference, with the exact production origin configured. Both resources remain UNKNOWN for indexing.
+- Production GET/HEAD attempts still fail TLS before HTTP (curl 35); no deployment or Google indexing success is claimed.
+
+The rest of this document preserves the **historical baseline** for traceability, including its original command results. See the follow-up report for current files, tests, actual HTTP verification, remaining limits and required configuration.
+
+## Historical baseline outcome
 
 Implemented incrementally on the existing **FastAPI/Python + Feather + Jinja/vanilla-JS** application. No replacement database, Node server, frontend redesign, ownership workaround, IndexNow key, or indexing guarantee was introduced. Existing submissions, analyzer, authentication, users, queue, monitoring, publishing and optional integrations remain.
 

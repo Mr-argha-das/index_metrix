@@ -248,7 +248,7 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         raise PipelineRetryable("Fetcher not initialised.")
     await repos.events.add(
         "FETCH_STARTED",
-        "Fetching remote PDF (technical fetch by our server)",
+        "Fetching remote resource (technical fetch by our server)",
         pdf_id=pdf_id,
         status="RUNNING",
     )
@@ -261,7 +261,7 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
             raise PipelineRetryable(exc.message) from exc
         if exc.status in (401, 403, 404, 410):
             raise PipelineFinal(
-                f"Remote server returned HTTP {exc.status}. The PDF could not be validated.",
+                f"Remote server returned HTTP {exc.status}. The resource could not be validated.",
                 ST_INVALID,
                 classification="INVALID",
             ) from exc
@@ -273,6 +273,9 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         content_type=result.content_type,
         content_length=len(result.content),
         final_url=result.final_url,
+        redirect_chain=json_dumps(result.redirect_chain),
+        declared_content_length=result.content_length,
+        external_crawl_status=pdf.get("external_crawl_status") if pdf.get("external_crawl_status") == CS_CHECKED else "FETCH_CHECKED",
         last_checked_at=result.fetched_at or utcnow_iso(),
         crawl_status=pdf.get("crawl_status") if pdf.get("crawl_status") in (CS_CHECKED, "CRAWL_CHECKED") else "FETCH_CHECKED",
         robots_check=json_dumps(result.robots_checks),
@@ -296,7 +299,7 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
     # ---- STEP 3: HTTP status -------------------------------------------------
     if result.status in (401, 403, 404, 410):
         raise PipelineFinal(
-            f"Remote server returned HTTP {result.status}. The PDF could not be validated.",
+            f"Remote server returned HTTP {result.status}. The resource could not be validated.",
             ST_INVALID,
             classification="INVALID",
         )
@@ -307,86 +310,105 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
     if result.status != 200:
         raise PipelineFinal(f"Unexpected HTTP status {result.status}.", ST_FAILED)
 
-    # ---- STEP 4: PDF signature (never trust Content-Type alone) --------------
-    if not check_signature(result.content):
-        if result.content_type in ("text/html", "application/xhtml+xml"):
-            from ..pdf.html import extract_html
-            metadata = extract_html(result.content, result.final_url)
-            await repos.pdfs.update(pdf_id, html_metadata=json_dumps(metadata))
-        raise PipelineFinal(
-            f"Content mismatch: HTTP {result.status} with type "
-            f"'{result.content_type or 'none'}' but the body does not contain "
-            "the PDF signature (%PDF-). Not a PDF.",
-            ST_PDF_INVALID,
-            classification="INVALID_PDF",
-        )
+    analysis = None
+    if not check_signature(result.content) and result.content_type in ("text/html", "application/xhtml+xml"):
+        from ..pdf.html import extract_html
+        metadata = await asyncio.to_thread(extract_html, result.content, result.final_url)
+        await repos.pdfs.update(pdf_id, html_metadata=json_dumps(metadata))
+        from urllib.parse import urlsplit
+        expects_pdf = urlsplit(vurl.url).path.lower().endswith(".pdf")
+        headers = {k.lower(): v for k, v in result.headers.items()}
+        noindex = any(word in headers.get("x-robots-tag", "").lower() for word in ("noindex", "none"))
+        if expects_pdf or noindex or not metadata["publishable"]:
+            reason = "Expected PDF signature (%PDF-) but received HTML; not publishing a misleading PDF page." if expects_pdf else metadata["rejectionReason"] or "Source X-Robots-Tag prohibits indexing."
+            raise PipelineFinal(reason, ST_PDF_INVALID if expects_pdf else ST_INVALID, classification="INVALID_PDF" if expects_pdf else "HTML_REJECTED")
+        await repos.pdfs.update(pdf_id, status="HTML_VALID", resource_type="HTML", submission_status="VALIDATED",
+                               validated_at=utcnow_iso(), sha256=sha256_hex(result.content),
+                               classification="HTML", title=metadata["title"],
+                               first_page_text=metadata["excerpt"], text_length=metadata["textLength"],
+                               page_count=None, author=None, subject=None, creator=None, producer=None,
+                               created_date=None, modified_date=None, language=None)
+        await repos.events.add("HTML_VALID", "HTML article analyzed from source text and metadata.", pdf_id=pdf_id, status="SUCCESS")
+    else:
+        # ---- STEP 4: PDF signature (never trust Content-Type alone) --------------
+        if not check_signature(result.content):
+            raise PipelineFinal(
+                f"Content mismatch: HTTP {result.status} with type "
+                f"'{result.content_type or 'none'}' but the body does not contain "
+                "the PDF signature (%PDF-). Not a PDF.",
+                ST_PDF_INVALID,
+                classification="INVALID_PDF",
+            )
 
-    # ---- STEP 5: analysis ------------------------------------------------------
-    await repos.pdfs.update(pdf_id, status=ST_ANALYZING)
-    await repos.events.add(
-        "PDF_ANALYZING",
-        "Analyzing PDF structure and metadata",
-        pdf_id=pdf_id,
-        status="RUNNING",
-    )
-    analysis = await analyze_pdf_isolated(result.content)
-    digest = sha256_hex(result.content)
-
-    if not analysis.ok:
-        if analysis.classification == "INVALID_PDF":
-            raise PipelineFinal(analysis.error or "Invalid PDF.", ST_PDF_INVALID, classification="INVALID_PDF")
-        raise PipelineRetryable(analysis.error or "PDF analysis failed.")
-
-    # duplicate content detection (same file from a different URL)
-    dupes = await repos.pdfs.find(lambda r: r.get("sha256") == digest and r.get("id") != pdf_id)
-    if dupes:
+        # ---- STEP 5: analysis ------------------------------------------------------
+        await repos.pdfs.update(pdf_id, status=ST_ANALYZING)
         await repos.events.add(
-            "SAME_PDF_CONTENT",
-            f"Identical PDF content already known as PDF #{dupes[0]['id']} ({dupes[0]['normalized_url']})",
+            "PDF_ANALYZING",
+            "Analyzing PDF structure and metadata",
             pdf_id=pdf_id,
-            status="WARN",
-            metadata={"other_pdf_id": dupes[0]["id"], "sha256": digest},
+            status="RUNNING",
+        )
+        analysis = await analyze_pdf_isolated(result.content)
+        digest = sha256_hex(result.content)
+
+        if not analysis.ok:
+            if analysis.classification == "INVALID_PDF":
+                raise PipelineFinal(analysis.error or "Invalid PDF.", ST_PDF_INVALID, classification="INVALID_PDF")
+            raise PipelineRetryable(analysis.error or "PDF analysis failed.")
+
+        # duplicate content detection (same file from a different URL)
+        dupes = await repos.pdfs.find(lambda r: r.get("sha256") == digest and r.get("id") != pdf_id)
+        if dupes:
+            await repos.events.add(
+                "SAME_PDF_CONTENT",
+                f"Identical PDF content already known as PDF #{dupes[0]['id']} ({dupes[0]['normalized_url']})",
+                pdf_id=pdf_id,
+                status="WARN",
+                metadata={"other_pdf_id": dupes[0]["id"], "sha256": digest},
+            )
+
+        await repos.pdfs.update(
+            pdf_id,
+            status=ST_PDF_VALID,
+            resource_type="PDF",
+            html_metadata=None,
+            submission_status="VALIDATED",
+            validated_at=utcnow_iso(),
+            sha256=digest,
+            classification=analysis.classification,
+            title=analysis.title,
+            author=analysis.author,
+            subject=analysis.subject,
+            creator=analysis.creator,
+            producer=analysis.producer,
+            created_date=analysis.creation_date,
+            modified_date=analysis.modification_date,
+            text_length=analysis.text_length,
+            first_page_text=analysis.first_page_text,
+            language=analysis.language,
+            page_count=analysis.page_count,
+        )
+        await repos.events.add(
+            "PDF_VALID",
+            f"PDF valid: {analysis.page_count} page(s), {analysis.classification}, "
+            f"{len(result.content)} bytes, sha256={digest[:12]}…",
+            pdf_id=pdf_id,
+            status="SUCCESS",
+            evidence_type="TECHNICAL_ANALYSIS",
+            metadata={
+                "classification": analysis.classification,
+                "page_count": analysis.page_count,
+                "title": analysis.title,
+                "sha256": digest,
+            },
+        )
+        await repos.events.add(
+            "PDF_ANALYZED",
+            f"Analysis complete: {analysis.classification}, text_chars={analysis.text_length}, language≈{analysis.language}",
+            pdf_id=pdf_id,
+            status="SUCCESS",
         )
 
-    await repos.pdfs.update(
-        pdf_id,
-        status=ST_PDF_VALID,
-        submission_status="VALIDATED",
-        validated_at=utcnow_iso(),
-        sha256=digest,
-        classification=analysis.classification,
-        title=analysis.title,
-        author=analysis.author,
-        subject=analysis.subject,
-        creator=analysis.creator,
-        producer=analysis.producer,
-        created_date=analysis.creation_date,
-        modified_date=analysis.modification_date,
-        text_length=analysis.text_length,
-        first_page_text=analysis.first_page_text,
-        language=analysis.language,
-        page_count=analysis.page_count,
-    )
-    await repos.events.add(
-        "PDF_VALID",
-        f"PDF valid: {analysis.page_count} page(s), {analysis.classification}, "
-        f"{len(result.content)} bytes, sha256={digest[:12]}…",
-        pdf_id=pdf_id,
-        status="SUCCESS",
-        evidence_type="TECHNICAL_ANALYSIS",
-        metadata={
-            "classification": analysis.classification,
-            "page_count": analysis.page_count,
-            "title": analysis.title,
-            "sha256": digest,
-        },
-    )
-    await repos.events.add(
-        "PDF_ANALYZED",
-        f"Analysis complete: {analysis.classification}, text_chars={analysis.text_length}, language≈{analysis.language}",
-        pdf_id=pdf_id,
-        status="SUCCESS",
-    )
 
     # ---- STEP 6: dedicated page ------------------------------------------------
     await repos.pdfs.update(pdf_id, status=ST_PAGE_GENERATING)
@@ -432,7 +454,8 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
     await repos.pdfs.update(
         pdf_id, submission_status="DISCOVERY_SUBMITTED",
         discovery_status="DISCOVERED" if current.get("discovery_status") == "DISCOVERED" else DS_PENDING,
-        discovery_channels=json_dumps(channels),
+        discovery_channels=json_dumps(channels + ["internal-links"]),
+        external_discovery_status="DISCOVERED" if current.get("external_discovery_status") == "DISCOVERED" else DS_PENDING,
     )
     await repos.events.add(
         "DISCOVERY_PENDING",
@@ -441,6 +464,9 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         pdf_id=pdf_id,
         status="PENDING",
     )
+
+    from ..publishing.discovery import record_discovery_fallback
+    await record_discovery_fallback(repos, pdf_id)
 
     # schedule the initial technical probe (honest label, not a "Google crawl")
     await manager.enqueue(JOB_PROBE, pdf_id=pdf_id, payload={"kind": "initial"})
@@ -499,6 +525,7 @@ async def run_probe(manager: QueueManager, job: dict) -> None:
         pdf_id,
         last_probe_at=utcnow_iso(),
         last_probe_status=str(result.status),
+        external_crawl_status=pdf.get("external_crawl_status") if pdf.get("external_crawl_status") == CS_CHECKED else "FETCH_CHECKED",
     )
     await repos.events.add(
         "TECHNICAL_PROBE",

@@ -46,7 +46,8 @@
       empty.style.display = "none";
       tbody.innerHTML = data.items
         .map((p) => {
-          const title = p.title || "Untitled PDF";
+          const title = p.title || "Untitled resource";
+          const states = p.states || {};
           return `<tr>
             <td>
               <div class="cell-main">${esc(title)}</div>
@@ -60,15 +61,17 @@
             <td>
               ${
                 p.page
-                  ? `<a href="/pdf/${esc(p.page.slug)}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Open page</a>`
+                  ? `<a href="${p.page.page_kind === "demo-job" ? "/jobs/" + esc(p.page.job_number) : "/pdf/" + esc(p.page.slug)}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Open page</a>`
                   : '<span class="faint">—</span>'
               }
             </td>
-            <td>${pill(p.status)}</td>
-            <td>${pill(p.discovery_status)}</td>
-            <td>${pill(p.crawl_status)}</td>
-            <td>${pill(p.index_status)}</td>
-            <td>${pill(p.source_index_status || "INDEX_UNKNOWN")}</td>
+            <td>${pill(p.status)}${p.error ? `<div class="small mt-8" style="color:var(--red);max-width:300px;overflow-wrap:anywhere"><strong>Failure reason:</strong> ${esc(p.error)}</div><a class="small" href="/pdfs/${p.id}">View diagnostics</a>` : ""}</td>
+            <td title="Direct request-indexing is unsupported; normal discovery remains active.">${pill(states.referenceSubmissionStatus)}</td>
+            <td>${pill(states.referenceCrawlStatus)}</td>
+            <td>${pill(states.referenceIndexStatus)}</td>
+            <td>${pill(states.externalDiscoveryStatus)}</td>
+            <td>${pill(states.externalCrawlStatus)}</td>
+            <td>${pill(states.externalIndexStatus)}</td>
             <td class="cell-sub">${timeAgo(p.last_checked_at || p.last_probe_at)}</td>
             <td class="right">
               <div class="flex" style="justify-content:flex-end;gap:4px">

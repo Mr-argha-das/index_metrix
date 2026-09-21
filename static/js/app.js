@@ -9,20 +9,47 @@ const App = (() => {
     return m ? decodeURIComponent(m[1]) : "";
   }
 
-  // Session token kept in (partitioned) localStorage. This is the
-  // cookie-less path for embedded previews whose browsers block
-  // third-party cookies: the login response returns the token, every
-  // request sends it as `Authorization: Bearer`, and page loads use a
-  // one-time handoff token (?st=) minted by /api/auth/handoff.
+  // Storage can be unavailable in embedded previews. Always retain the
+  // current session in memory; storage is only an optional persistence layer.
   const SESSION_KEY = "bi_session";
+  let memorySession = "";
+  let sessionCleared = false;
   function sessionToken() {
-    try { return localStorage.getItem(SESSION_KEY) || ""; } catch (e) { return ""; }
+    if (memorySession || sessionCleared) return memorySession;
+    for (const name of ["localStorage", "sessionStorage"]) {
+      try {
+        const token = window[name].getItem(SESSION_KEY);
+        if (token) return (memorySession = token);
+      } catch (e) { /* storage denied */ }
+    }
+    return "";
   }
   function setSession(token) {
-    try { if (token) localStorage.setItem(SESSION_KEY, token); } catch (e) {}
+    if (!token) return;
+    memorySession = token;
+    sessionCleared = false;
+    for (const name of ["localStorage", "sessionStorage"]) {
+      try { window[name].setItem(SESSION_KEY, token); } catch (e) {}
+    }
   }
   function clearSession() {
-    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    memorySession = "";
+    sessionCleared = true;
+    for (const name of ["localStorage", "sessionStorage"]) {
+      try { window[name].removeItem(SESSION_KEY); } catch (e) {}
+    }
+  }
+
+  // A single-use page handoff carries the existing authenticated session
+  // into this page even when BOTH cookies and browser storage are blocked.
+  const bootstrap = document.getElementById("session-bootstrap");
+  if (bootstrap) {
+    try { setSession(JSON.parse(bootstrap.textContent)); } finally { bootstrap.remove(); }
+  }
+  const cleanUrl = new URL(location.href);
+  if (cleanUrl.searchParams.has("st")) {
+    cleanUrl.searchParams.delete("st");
+    history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
   }
 
   async function api(path, options = {}) {
@@ -69,20 +96,33 @@ const App = (() => {
     return data;
   }
 
-  /** Navigate to `next` in a way that works with or without cookies:
-      exchange the stored session for a one-time page token (`?st=`).
-      Falls back to a plain navigation when handoff is unavailable. */
+  /** Use a one-time grant for same-origin page navigation, never a bearer
+      token in a URL. Do not silently redirect into a login loop on failure. */
   async function gotoWithSession(next) {
-    try {
-      const h = await api("/api/auth/handoff", { method: "POST" });
-      if (h && h.st) {
-        const sep = next.includes("?") ? "&" : "?";
-        location.replace(next + sep + "st=" + encodeURIComponent(h.st));
-        return true;
-      }
-    } catch (e) { /* fall through to plain navigation */ }
-    location.href = next;
-    return false;
+    const dest = new URL(next, location.origin);
+    if (!next.startsWith("/") || dest.origin !== location.origin) {
+      throw new Error("Invalid redirect destination.");
+    }
+    dest.searchParams.delete("st");
+    const h = await api("/api/auth/handoff", { method: "POST" });
+    if (!h || !h.st) throw new Error("Could not continue your session. Please sign in again.");
+    dest.searchParams.set("st", h.st);
+    location.replace(dest.pathname + dest.search + dest.hash);
+    return true;
+  }
+
+  function initSessionNavigation() {
+    document.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || !sessionToken()) return;
+      const link = event.target.closest("a[href]");
+      if (!link || link.target || link.hasAttribute("download") || link.id === "logout-btn") return;
+      const url = new URL(link.href, location.href);
+      if (url.origin !== location.origin || !/^\/(dashboard|submit|urls|pdfs|queue|monitoring|sitemap|rss|users|settings|integrations|logs|analyzer)(\/|$)/.test(url.pathname)) return;
+      event.preventDefault();
+      gotoWithSession(url.pathname + url.search + url.hash).catch((error) => {
+        toast("Navigation failed", error.message, "error");
+      });
+    });
   }
 
   // ------------------------------------------------------------ toasts
@@ -202,6 +242,8 @@ const App = (() => {
     DISCOVERY_PENDING: ["cyan", "Discovery Pending"],
     DISCOVERY_SUBMITTED: ["violet", "Discovery Submitted"],
     // crawl
+    UNSUPPORTED: ["slate", "Unsupported — normal discovery"],
+    HTML: ["blue", "HTML article"],
     FETCH_CHECKED: ["blue", "Fetch Checked"],
     SEARCH_ENGINE_CRAWL_EVIDENCE: ["violet", "Search-engine crawl evidence"],
     DONE: ["green", "Done"],
@@ -301,14 +343,15 @@ const App = (() => {
 
   // ------------------------------------------------------------ theme
   function initTheme() {
-    const saved = localStorage.getItem("bi-theme");
+    let saved = null;
+    try { saved = localStorage.getItem("bi-theme"); } catch (e) {}
     if (saved) document.documentElement.setAttribute("data-theme", saved);
     const btn = document.getElementById("theme-toggle");
     if (btn) {
       btn.addEventListener("click", () => {
         const cur = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
         document.documentElement.setAttribute("data-theme", cur);
-        localStorage.setItem("bi-theme", cur);
+        try { localStorage.setItem("bi-theme", cur); } catch (e) {}
       });
     }
   }
@@ -335,7 +378,8 @@ const App = (() => {
   function initLogout() {
     const btn = document.getElementById("logout-btn");
     if (!btn) return;
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (event) => {
+      event.preventDefault();
       try {
         await api("/api/auth/logout", { method: "POST" });
       } catch (e) {
@@ -350,6 +394,7 @@ const App = (() => {
     initTheme();
     initSidebar();
     initLogout();
+    initSessionNavigation();
   });
 
   return {

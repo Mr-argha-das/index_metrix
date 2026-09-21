@@ -21,6 +21,7 @@
           <div class="brand-sub">PDF Discovery &amp; Monitoring</div>
         </div>
       </div>
+      <p><a href="/references">Browse public references</a></p>
       <div class="login-error" id="login-error"></div>
       <form id="login-form">
         <div class="field">
@@ -41,7 +42,7 @@
     </div>
   </div>
 
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v=auth-storage-2"></script>
   <script>
     (function () {
       const next = new URLSearchParams(location.search).get("next");
@@ -59,7 +60,11 @@
         } catch (e) {
           return; // stale token → show the login form
         }
-        await App.gotoWithSession(target);
+        try { await App.gotoWithSession(target); } catch (e) {
+          const errEl = document.getElementById("login-error");
+          errEl.textContent = e.message;
+          errEl.style.display = "block";
+        }
       }
 
       form.addEventListener("submit", async (e) => {

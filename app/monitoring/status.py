@@ -108,6 +108,10 @@ async def apply_gsc_evidence(repos: Repos, pdf_id: int, inspection: dict) -> dic
         pdf_id,
         discovery_status="DISCOVERED" if status == IS_INDEXED or evidence.get("last_crawl_time") else ((prev or {}).get("discovery_status") or "NOT_SUBMITTED"),
         index_status=status,
+        reference_index_status="UNKNOWN" if status == IS_UNKNOWN else status,
+        reference_last_checked_at=utcnow_iso(),
+        reference_crawl_status="SEARCH_ENGINE_CRAWL_EVIDENCE" if evidence.get("last_crawl_time") else ((prev or {}).get("reference_crawl_status") or "UNKNOWN"),
+        reference_crawl_evidence=json_dumps(evidence) if evidence.get("last_crawl_time") else (prev or {}).get("reference_crawl_evidence"),
         index_evidence=json_dumps(evidence),
         crawl_status=crawl if crawl != CS_UNKNOWN else ((prev or {}).get("crawl_status") or CS_UNKNOWN),
         crawl_evidence=json_dumps(

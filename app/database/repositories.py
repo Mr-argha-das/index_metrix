@@ -219,6 +219,26 @@ class EventsRepository(Repository):
 
 
 class SettingsRepository(Repository):
+    async def reserve_counter(self, key: str) -> int:
+        """Reserve a persistent monotonic number, atomically across workers.
+
+        Gaps after crashes are fine. Deleting a page never reuses its URL.
+        """
+        def reserve(df):
+            mask = df["key"] == key
+            number = int(df.loc[mask, "value"].iloc[0]) + 1 if mask.any() else 1
+            if mask.any():
+                df.loc[mask, "value"] = str(number)
+                df.loc[mask, "updated_at"] = utcnow_iso()
+            else:
+                row = {"id": int(df["id"].max()) + 1 if len(df) else 1,
+                       "key": key, "value": str(number), "updated_at": utcnow_iso()}
+                df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+                df["id"] = pd.to_numeric(df["id"]).astype("Int64")
+            self.store.save(df, backup=False)
+            return number
+        return await self._with_lock(reserve)
+
     async def get_key(self, key: str) -> dict | None:
         rows = await self.find(lambda r: r.get("key") == key)
         return rows[0] if rows else None

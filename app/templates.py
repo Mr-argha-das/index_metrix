@@ -50,6 +50,8 @@ def get_templates() -> _J2:
     if _templates is None:
         env = _J2(TEMPLATES_DIR)
         jenv = env.env  # the underlying Jinja2 Environment
+        from .publishing.pages import public_page_path
+        jenv.globals["reference_path"] = public_page_path
         jenv.globals["static_url"] = "/static"
         jenv.globals["integration_pill"] = _integration_pill
         jenv.filters["integration_pill"] = _integration_pill
@@ -80,11 +82,12 @@ def render(request: Request, name: str, context: dict | None = None) -> HTMLResp
         "request": request,
         "app_name": request.app.state.settings.app_name,
         "settings": request.app.state.settings,
-        "current_user": None,
+        "current_user": getattr(request.state, "session_user", None),
         "csrf_token": request.cookies.get("csrf", ""),
         "title": None,
         "subtitle": None,
         "nav": None,
+        "bootstrap_session": getattr(request.state, "bootstrap_session", None),
         **(context or {}),
     }
     if "user" in ctx and ctx["user"] is not None:
@@ -92,6 +95,9 @@ def render(request: Request, name: str, context: dict | None = None) -> HTMLResp
     resp = templates.TemplateResponse(request, name, ctx)
     for k, v in _security_headers(request).items():
         resp.headers[k] = v
+    if ctx["current_user"]:
+        resp.headers["Cache-Control"] = "no-store, private"
+        resp.headers["Referrer-Policy"] = "no-referrer"
     return resp
 
 

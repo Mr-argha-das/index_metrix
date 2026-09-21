@@ -37,27 +37,36 @@
         <div class="brand-logo" style="width:30px;height:30px;font-size:12px">BI</div>
         <span style="font-weight:750;font-size:14px">{{ app_name }}</span>
       </a>
-      <span class="small faint">PDF discovery reference page</span>
+      <span class="small faint">{{ "Fictional job demo + source reference" if demo_job else resource_type ~ " discovery reference page" }}</span>
     </div>
   </header>
 
   <div class="pdf-page-inner">
     <div class="pdf-page-hero">
+      {% if demo_job %}
+      <div class="card mb-16" style="border:2px solid var(--amber,#eab308)"><div class="card-body">
+        <strong>Fictional demo — not a real vacancy.</strong>
+        <p style="margin-bottom:0">Job details below are randomly generated examples, not facts extracted from the submitted source. The company, salary and requirements are illustrative. No applications are accepted.</p>
+      </div></div>
+      {% endif %}
       <div class="flex wrap" style="gap:8px;margin-bottom:14px">
-        <span class="pill green"><span class="dot"></span>Validated PDF</span>
+        {% if demo_job %}<span class="pill amber">Fictional job demo #{{ demo_job.number }}</span>{% endif %}
+        <span class="pill green"><span class="dot"></span>{{ "Source: validated" if demo_job else "Validated" }} {{ resource_type }}</span>
         {% if classification %}<span class="pill {{ 'green' if classification == 'TEXT_PDF' else 'amber' }}">{{ classification.replace('_', ' ') }}</span>{% endif %}
         <span class="pill slate"><span class="dot"></span>Source: {{ source_domain }}</span>
       </div>
       <h1>{{ title }}</h1>
       <p class="desc">{{ description }}</p>
 
+      {% if demo_job %}<p><strong>Separate source resource:</strong> the link below is the URL submitted by the operator. It is not an official document for this fictional job, and no employer relationship is claimed.</p>{% endif %}
       <div class="pdf-cta-row">
         <!-- Main CTA: a normal HTML link to the ORIGINAL third-party PDF.
              No JavaScript. The file is hosted by the source publisher, not us. -->
         <a class="pdf-cta" href="{{ original_url }}" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
-          View Original PDF
+          {{ "View Original PDF" if resource_type == "PDF" else "Read Original Article" }}
         </a>
+        {% if demo_job %}<a class="pdf-cta alt" href="#demo-apply">Application information — demo</a>{% endif %}
         <a class="pdf-cta alt" href="/sitemap.xml">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3-3 3"/><path d="M2 12c0-1.7 1.3-3 3-3h14M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2h-4"/></svg>
           Sitemap
@@ -69,29 +78,30 @@
       </p>
     </div>
 
+    {% if demo_job %}{% include "demo_job_details.html" %}<h2>Actual submitted source metadata</h2>{% endif %}
     <div class="pdf-page-grid">
       <div class="card">
-        <div class="card-head"><div><h3>About this document</h3><div class="sub">metadata extracted from the PDF itself</div></div></div>
+        <div class="card-head"><div><h3>About this document</h3><div class="sub">metadata extracted from the original {{ resource_type }} resource</div></div></div>
         <div class="card-body">
           <div class="meta-list">
-            <dt>Document title</dt><dd>{{ title }}</dd>
+            <dt>Document title</dt><dd>{{ pdf.title or "Not stated in source metadata" }}</dd>
             <dt>Source</dt><dd><a href="{{ original_url }}" rel="noopener">{{ source_domain }}</a></dd>
-            <dt>Author</dt><dd>{{ author or "Not stated in PDF metadata" }}</dd>
+            <dt>Author</dt><dd>{{ author or "Not stated in source metadata" }}</dd>
             <dt>Pages</dt><dd>{{ page_count if page_count else "—" }}</dd>
             <dt>Content type</dt><dd>{{ pdf.content_type }}</dd>
             <dt>Validated at</dt><dd>{{ pdf.validated_at or "Unavailable (legacy record)" }}</dd>
             <dt>File size</dt><dd>{{ file_size }} bytes ({{ '%.1f' | format((file_size or 0) / 1048576) }} MB)</dd>
-            <dt>PDF created</dt><dd>{{ created_date or "—" }}</dd>
+            {% if resource_type == "PDF" %}<dt>PDF created</dt><dd>{{ created_date or "—" }}</dd>
             <dt>PDF modified</dt><dd>{{ modified_date or "—" }}</dd>
-            <dt>Producer</dt><dd>{{ producer or "—" }}</dd>
-            <dt>Extracted text characters (up to 300 pages)</dt><dd>{{ text_length or 0 }}</dd>
+            <dt>Producer</dt><dd>{{ producer or "—" }}</dd>{% endif %}
+            <dt>Extracted text characters (bounded analysis)</dt><dd>{{ text_length or 0 }}</dd>
             {% if sha256 %}<dt>SHA-256</dt><dd class="mono small">{{ sha256 }}</dd>{% endif %}
             <dt>Page published</dt><dd>{{ published_at }}</dd>
             <dt>Last updated</dt><dd>{{ updated_at }}</dd>
           </div>
           {% if excerpt %}
           <hr class="divider">
-          <div class="small faint mb-8">PREVIEW — first-page excerpt (a short extract, not the full document)</div>
+          <div class="small faint mb-8">PREVIEW — {{ "first-page excerpt" if resource_type == "PDF" else "article excerpt" }} (not the full resource)</div>
           <div class="pdf-excerpt">{{ excerpt }}</div>
           {% else %}
           <p>Text extraction was unavailable or no extractable text was found. No document content has been inferred.</p>
@@ -103,14 +113,17 @@
         <div class="card">
           <div class="card-head"><div><h3>Technical summary</h3></div></div>
           <div class="card-body small" style="color:var(--muted)">
-            <p style="margin:0 0 8px">This file was fetched and validated by {{ app_name }}: HTTP status, Content-Type and the <span class="mono">%PDF-</span> signature were all checked, and structure metadata was extracted without re-hosting the file.</p>
+            {% if resource_type == "PDF" %}<p style="margin:0 0 8px">This file was fetched and validated by {{ app_name }}: HTTP status, Content-Type and the <span class="mono">%PDF-</span> signature were all checked, and structure metadata was extracted without re-hosting the file.</p>
+            {% else %}<p>This HTML page was fetched safely and analyzed for title, description and useful text. Scripts were not executed and the article is not re-hosted.</p>
+            <p>Source canonical: {{ html_metadata.canonical or "Not declared" }}</p>
+            <p>Source robots: {{ html_metadata.robots or "Not declared" }}</p>{% endif %}
             <p style="margin:0">Classification: <strong style="color:var(--text)">{{ classification or "unknown" }}</strong>{% if language %} · language estimate: <strong style="color:var(--text)">{{ language }}</strong>{% endif %}</p>
           </div>
         </div>
         <div class="card">
           <div class="card-head"><div><h3>Discovery</h3></div></div>
           <div class="card-body small" style="color:var(--muted)">
-            <p style="margin:0">This page is listed in the site <a href="/sitemap.xml">sitemap</a> and <a href="/rss.xml">RSS feed</a> so search engines can find it. Indexing, when it happens, is decided by the search engines — it is not something this service can force or verify for third-party files.</p>
+            <p style="margin:0">Browse the <a href="/references">reference library</a>{% if page.sitemap_included %}, <a href="/sitemap.xml">sitemap</a>{% endif %}{% if page.rss_included %} and recent <a href="/rss.xml">RSS feed</a>{% endif %} for discovery links. Indexing, when it happens, is decided by the search engines — it is not something this service can force or verify for third-party files.</p>
           </div>
         </div>
       </div>
@@ -118,8 +131,8 @@
 
     <footer class="pdf-page-footer">
       <div class="flex-between wrap">
-        <span>© {{ published_at[:4] }} {{ app_name }} — PDF URL validation, publishing & monitoring.</span>
-        <span class="flex"><a href="/sitemap.xml">sitemap.xml</a> · <a href="/rss.xml">rss.xml</a> · <a href="/robots.txt">robots.txt</a></span>
+        <span>© {{ published_at[:4] }} {{ app_name }} — Resource validation, publishing & monitoring.</span>
+        <span class="flex"><a href="/references">Browse references</a> · <a href="/sitemap.xml">sitemap.xml</a> · <a href="/rss.xml">rss.xml</a> · <a href="/robots.txt">robots.txt</a></span>
       </div>
     </footer>
   </div>

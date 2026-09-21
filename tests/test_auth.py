@@ -249,3 +249,42 @@ class TestCSRF:
     def test_get_requests_need_no_csrf(self, client):
         admin_client(client)
         assert client.get("/api/dashboard/stats").status_code == 200
+
+
+class TestStorageBlockedPageHandoff:
+    _login_no_cookies = TestBearerFallback._login_no_cookies
+
+    @pytest.mark.parametrize('path', ['/dashboard', '/submit', '/urls', '/settings'])
+    def test_authenticated_page_bootstrap_and_next_navigation(self, client, path):
+        import json
+        from bs4 import BeautifulSoup
+        token = self._login_no_cookies(client)
+        response = client.post('/api/auth/handoff', headers={'Authorization': f'Bearer {token}'})
+        client.cookies.clear()
+        page = client.get(path, params={'st': response.json()['st']})
+        assert page.status_code == 200
+        assert 'no-store' in page.headers['cache-control']
+        assert page.headers['referrer-policy'] == 'no-referrer'
+        dom = BeautifulSoup(page.text, 'html.parser')
+        resumed = json.loads(dom.find('script', id='session-bootstrap').string)
+        assert resumed == token
+        assert dom.find(id='logout-btn')
+        client.cookies.clear()
+        assert client.get('/api/dashboard/stats', headers={'Authorization': f'Bearer {resumed}'}).status_code == 200
+        client.cookies.clear()
+        assert client.post('/api/auth/handoff', headers={'Authorization': f'Bearer {resumed}'}).status_code == 200
+
+    def test_logout_revokes_already_issued_handoff(self, client):
+        token = self._login_no_cookies(client)
+        grant = client.post('/api/auth/handoff', headers={'Authorization': f'Bearer {token}'}).json()['st']
+        client.cookies.clear()
+        assert client.post('/api/auth/logout', headers={'Authorization': f'Bearer {token}'}).status_code == 200
+        client.cookies.clear()
+        page = client.get('/dashboard', params={'st': grant}, follow_redirects=False)
+        assert page.status_code == 302 and page.headers['location'].startswith('/login')
+
+    def test_page_grant_cannot_authenticate_an_api_request(self, client):
+        token = self._login_no_cookies(client)
+        grant = client.post('/api/auth/handoff', headers={'Authorization': f'Bearer {token}'}).json()['st']
+        client.cookies.clear()
+        assert client.get('/api/auth/me', params={'st': grant}).status_code == 401

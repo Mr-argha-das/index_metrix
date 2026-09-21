@@ -15,7 +15,7 @@ from .feather_store import Database, DatabaseCorruptedError, TABLE_SCHEMAS
 
 log = logging.getLogger("bot_indexer.migrations")
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "4"
 
 
 def describe_schemas() -> dict[str, dict[str, str]]:
@@ -88,5 +88,29 @@ async def repair_status_semantics(repos) -> None:
             changes["crawl_status"] = "SEARCH_ENGINE_CRAWL_EVIDENCE" if crawl.get("source") == "Google Search Console" and crawl.get("last_crawl_time") else "CRAWL_UNKNOWN"
         if pdf.get("crawl_status") == "CRAWL_UNKNOWN" and pdf.get("http_status"):
             changes["crawl_status"] = "FETCH_CHECKED"
+        from ..monitoring.resource_states import resource_states
+        projected = resource_states({**pdf, **changes}, bool(page))
+        for field, key in (
+            ("reference_crawl_status", "referenceCrawlStatus"),
+            ("reference_index_status", "referenceIndexStatus"),
+            ("external_discovery_status", "externalDiscoveryStatus"),
+            ("external_crawl_status", "externalCrawlStatus"),
+            ("external_index_status", "externalIndexStatus"),
+        ):
+            if not pdf.get(field):
+                changes[field] = projected[key]
+        if changes.get("index_status") == "INDEX_UNKNOWN":
+            changes["reference_index_status"] = "UNKNOWN"
+        if page:
+            from ..publishing.discovery import REQUEST_INDEXING_REASON
+            channels = json_loads(changes.get("discovery_channels") or pdf.get("discovery_channels"), []) or []
+            if "internal-links" not in channels:
+                channels.append("internal-links")
+                changes["discovery_channels"] = json_dumps(channels)
+            if not pdf.get("reference_submission_status") or pdf.get("reference_submission_status") == "NOT_REQUESTED":
+                changes["reference_submission_status"] = "UNSUPPORTED"
+                changes["reference_submission_result"] = json_dumps({
+                    "operation": "request-indexing", "status": "UNSUPPORTED", "reason": REQUEST_INDEXING_REASON,
+                    "fallback": "normal-discovery", "channels": channels, "googleRequestMade": False})
         if changes:
             await repos.pdfs.update(pdf["id"], **changes)

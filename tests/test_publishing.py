@@ -32,7 +32,7 @@ class TestSitemap:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("application/xml")
         body = r.text
-        assert f"/pdf/{slug}" in body
+        assert pdf["page"]["page_url"] in body
         assert "<lastmod>" in body
         # third-party URLs must NEVER appear in the sitemap
         assert pdf_server_url not in body
@@ -58,9 +58,9 @@ class TestSitemap:
         admin_client(client)
         pdf = _submit_and_publish(client, f"{pdf_server_url}/docs/report.pdf?rm=1")
         slug = pdf["page"]["slug"]
-        assert slug in client.get("/sitemap.xml").text
+        assert pdf["page"]["page_url"] in client.get("/sitemap.xml").text
         client.delete(f"/api/pdfs/{pdf['id']}", headers={"X-CSRF-Token": get_csrf(client)})
-        assert slug not in client.get("/sitemap.xml").text
+        assert pdf["page"]["page_url"] not in client.get("/sitemap.xml").text
 
 
 class TestRSS:
@@ -73,7 +73,7 @@ class TestRSS:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("application/rss+xml")
         body = r.text
-        assert f"/pdf/{slug}" in body
+        assert pdf["page"]["page_url"] in body
         assert "<guid isPermaLink=\"true\">" in body
         assert "<pubDate>" in body
         # third-party URL never in RSS

@@ -12,8 +12,8 @@
           <div class="sub mono">{{ pdf.normalized_url }}</div>
         </div>
         <div class="actions">
-          {{ pill(pill_status(pdf.status)) }}
-          {% if page %}<a class="btn btn-sm btn-primary" href="/pdf/{{ page.slug }}" target="_blank" rel="noopener">Open dedicated page</a>{% endif %}
+          {{ pill_status(pdf.status) }}
+          {% if page %}<a class="btn btn-sm btn-primary" href="{{ reference_path(page) }}" target="_blank" rel="noopener">Open dedicated page</a>{% endif %}
         </div>
       </div>
       <div class="card-body">
@@ -73,7 +73,7 @@
       <div class="card-head"><div><h3>Dedicated page</h3><div class="sub">our own page, linked from sitemap &amp; RSS</div></div></div>
       <div class="card-body">
         <div class="meta-list">
-          <dt>URL</dt><dd><a href="/pdf/{{ page.slug }}" class="mono" target="_blank" rel="noopener">{{ page.page_url }}</a></dd>
+          <dt>URL</dt><dd><a href="{{ reference_path(page) }}" class="mono" target="_blank" rel="noopener">{{ page.page_url }}</a></dd>
           <dt>Sitemap</dt><dd>{% if page.sitemap_included %}{{ pill2('green', 'In sitemap.xml') }}{% else %}{{ pill2('slate', 'Not included') }}{% endif %}</dd>
           <dt>RSS</dt><dd>{% if page.rss_included %}{{ pill2('green', 'In rss.xml') }}{% else %}{{ pill2('slate', 'Not included') }}{% endif %}</dd>
           <dt>Published</dt><dd>{{ page.published_at }}</dd>

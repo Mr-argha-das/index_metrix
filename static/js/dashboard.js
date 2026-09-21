@@ -20,6 +20,10 @@
     ["not_indexed", "Not Indexed", "k-unknown", "question"],
     ["indexed", "Indexed", "k-indexed", "check"],
     ["unknown", "Unknown", "k-unknown", "question"],
+    ["submission_queued", "Submission Queued", "k-processing", "spin"],
+    ["submission_accepted", "Submission Accepted", "k-valid", "check"],
+    ["submission_failed", "Submission Failed", "k-invalid", "x"],
+    ["submission_unsupported", "Submission Unsupported", "k-unknown", "question"],
   ];
 
   const KPI_ICONS = {
@@ -65,6 +69,8 @@
 
   function footFor(key) {
     switch (key) {
+      case "submission_unsupported": return "no generic Google request-indexing API; using discovery links";
+      case "submission_accepted": return "submission is not indexing evidence";
       case "total": return "all submitted URLs";
       case "valid": return "passed PDF validation";
       case "invalid": return "rejected or unresolvable";

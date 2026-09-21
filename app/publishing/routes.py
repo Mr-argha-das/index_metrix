@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import PlainTextResponse, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse, Response, RedirectResponse
 
 from .. import templates
 from ..auth.routes import require_user_page
@@ -12,7 +12,7 @@ from ..config import Settings
 from ..database.repositories import Repos
 from . import rss as rss_mod
 from . import sitemap as sitemap_mod
-from .pages import build_pdf_page_context
+from .pages import build_pdf_page_context, public_page_path
 
 log = logging.getLogger("bot_indexer.publishing")
 
@@ -43,6 +43,9 @@ async def pdf_dedicated_page(slug: str, request: Request):
     if not pdf:
         raise HTTPException(status_code=404, detail="Underlying PDF record not found.")
 
+    if page.get("page_kind") == "demo-job":
+        return RedirectResponse(public_page_path(page), status_code=308)
+
     from ..pdf.analyzer import AnalysisResult
 
     analysis = None
@@ -64,6 +67,40 @@ async def pdf_dedicated_page(slug: str, request: Request):
         )
     ctx = build_pdf_page_context(pdf, page, analysis, _settings(request))
     return templates.render(request, "pdf_page.html", ctx)
+
+
+@router.api_route("/jobs/{number}", include_in_schema=False, methods=["GET", "HEAD"])
+async def fictional_job_page(number: str, request: Request):
+    if not number.isascii() or not number.isdigit() or len(number) > 18 or str(int(number)) != number:
+        raise HTTPException(404, "Demo job page not found.")
+    pages = await _repos(request).pages.find(
+        lambda p: p.get("page_kind") == "demo-job" and p.get("job_number") == int(number))
+    if not pages:
+        raise HTTPException(404, "Demo job page not found.")
+    page = pages[0]
+    pdf = await _repos(request).pdfs.get(page["pdf_id"])
+    if not pdf:
+        raise HTTPException(404, "Source record not found.")
+    ctx = build_pdf_page_context(pdf, page, None, _settings(request))
+    if not ctx["demo_job"] or ctx["demo_job"].get("isFictional") is not True:
+        raise HTTPException(503, "Stored demo content unavailable.")
+    return templates.render(request, "pdf_page.html", ctx)
+
+
+@router.api_route("/references", include_in_schema=False, methods=["GET", "HEAD"])
+async def reference_library(request: Request, page: int = Query(1, ge=1)):
+    """Public, server-rendered discovery links, not an authenticated dashboard."""
+    rows = await _repos(request).pages.all(order="id")
+    per_page = 50
+    total_pages = max(1, (len(rows) + per_page - 1) // per_page)
+    if page > total_pages:
+        raise HTTPException(404, "Reference library page not found.")
+    base = _settings(request).public_base_url
+    return templates.render(request, "reference_library.html", {
+        "pages": rows[(page - 1) * per_page:page * per_page],
+        "number": page, "total_pages": total_pages,
+        "canonical_url": base + "/references" + (f"?page={page}" if page > 1 else ""),
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +175,8 @@ def render_robots(settings: Settings) -> str:
         "User-agent: *\n"
         "Allow: /\n"
         "Allow: /pdf/\n"
+        "Allow: /jobs/\n"
+        "Allow: /references\n"
         "Allow: /sitemap.xml\n"
         "Allow: /rss.xml\n"
         "Disallow: /api/\n"

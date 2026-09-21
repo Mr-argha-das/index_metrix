@@ -133,7 +133,7 @@ class TestGscEvidence:
         pdf_id = _submit_and_publish(client, f"{pdf_server_url}/docs/report.pdf?gsc1=1")
         detail, fake = self._inspect(client, pdf_id, "Submitted / Indexed")
         assert fake.called_with  # inspected OUR page url
-        assert fake.called_with[0].startswith("http://testserver/pdf/")
+        assert fake.called_with[0].startswith("http://testserver/jobs/")
         assert detail["item"]["index_status"] == "INDEXED"
         ev = detail["item"]["index_evidence"]
         assert ev["source"] == "Google Search Console"

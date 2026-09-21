@@ -103,6 +103,24 @@ def make_app(port: int = 8899) -> aiohttp.web.Application:
         # 40 MB of junk — must be rejected by the size cap
         return aiohttp.web.Response(body=b"%PDF-1.4\n" + b"\0" * (40 * 1024 * 1024), content_type="application/pdf")
 
+    async def html_article(request):
+        variant = request.match_info["variant"]
+        title = "Browser safety and document references"
+        robots = "noindex" if variant == "noindex" else "index,follow"
+        text = ("This article explains how public references describe documents while preserving "
+                "the original publisher's ownership. Accurate metadata, ordinary links and "
+                "honest discovery states help readers evaluate the original source. " * 3)
+        if variant == "thin":
+            text = "Click this article."
+        if variant == "challenge":
+            title = "Verify you are human"
+        return aiohttp.web.Response(text=f'''<!doctype html><html><head><title>{title}</title>
+            <meta name="description" content="Practical notes about safe resource discovery.">
+            <meta name="robots" content="{robots}"><link rel="canonical" href="/blog/article"></head>
+            <body><main><h1>{title}</h1><p>{text}</p></main><script>not real content</script></body></html>''',
+            content_type="text/html")
+
+    app.router.add_get("/blog/{variant}", html_article)
     app.router.add_get("/docs/report.pdf", serve_pdf)
     app.router.add_get("/docs/report-octetstream.pdf", serve_octet)
     app.router.add_get("/docs/redirect.pdf", redirect_once)

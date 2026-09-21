@@ -57,7 +57,7 @@ def test_live_reference_quality_and_discovery(client, pdf_server_url):
     from bs4 import BeautifulSoup
     url, record = publish(client, pdf_server_url, "quality")
     guest = guest_client(client)
-    path = "/pdf/" + record["referenceId"]
+    path = record["referencePath"]
     get, head = guest.get(path), guest.head(path)
     assert get.status_code == head.status_code == 200
     assert not head.content
@@ -75,7 +75,7 @@ def test_live_reference_quality_and_discovery(client, pdf_server_url):
     assert record["discoveryStatus"] == "DISCOVERY_PENDING"
     assert record["crawlStatus"] == "FETCH_CHECKED"
     assert record["indexStatus"] == record["sourceIndexStatus"] == "UNKNOWN"
-    assert record["discoveryChannels"] == ["reference-page", "sitemap", "rss"]
+    assert record["discoveryChannels"] == ["reference-page", "sitemap", "rss", "internal-links"]
     assert record["robotsCheck"][0]["allowed"]
     sitemap = ET.fromstring(guest.get("/sitemap.xml").text)
     locations = [el.text for el in sitemap.iter() if el.tag.endswith("loc")]
@@ -368,7 +368,9 @@ async def test_unchanged_revalidation_preserves_slug_and_dates(tmp_path):
     analysis.title = "Changed title with actual metadata update"
     third = await create_page_for_pdf(repos, settings, pdf, analysis)
     assert third["slug"] == first["slug"] and third["published_at"] == first["published_at"]
-    assert third["title"] == analysis.title
+    assert third["title"] == first["title"]  # fictional title is not source metadata
+    assert analysis.title in third["description"]
+    assert third["demo_job"] == first["demo_job"]
 
 
 @pytest.mark.asyncio

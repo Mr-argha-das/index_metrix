@@ -123,7 +123,10 @@
       </main>
     </div>
   </div>
-  <script src="/static/js/app.js"></script>
+  {% if bootstrap_session %}
+  <script id="session-bootstrap" type="application/json">{{ bootstrap_session | tojson }}</script>
+  {% endif %}
+  <script src="/static/js/app.js?v=auth-storage-2"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

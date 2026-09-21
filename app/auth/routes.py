@@ -73,6 +73,7 @@ async def get_session_user(request: Request) -> dict | None:
         if session:
             user = await repos.users.get(session["user_id"])
             if user and user.get("status") == "ACTIVE":
+                request.state.session_user = user
                 return user
         # a bearer that does not resolve must not fall through to other
         # credentials (prevents mixing/stale-token confusion)
@@ -86,16 +87,22 @@ async def get_session_user(request: Request) -> dict | None:
         if session:
             user = await repos.users.get(session["user_id"])
             if user and user.get("status") == "ACTIVE":
+                request.state.session_user = user
                 return user
 
     # 3) One-time handoff token in the query string (page loads in
     #    cookie-less embeds; single use, 60 s TTL)
     st = request.query_params.get("st")
-    if st:
-        user_id = await auth.consume_handoff(st)
-        if user_id:
+    if st and request.method == "GET" and not request.url.path.startswith("/api/"):
+        grant = await auth.consume_handoff(st)
+        if grant:
+            user_id, session_token = grant
             user = await repos.users.get(user_id)
             if user and user.get("status") == "ACTIVE":
+                # Only this authenticated, non-cacheable page receives its own
+                # session bootstrap. No reusable credential goes in the URL.
+                request.state.bootstrap_session = session_token
+                request.state.session_user = user
                 return user
     return None
 
@@ -240,7 +247,8 @@ async def api_handoff(
 ) -> dict:
     """Mint a one-time, 60-second token that authenticates a single page
     load via ``?st=`` (used by cookie-less embedded previews)."""
-    return {"st": request.app.state.auth.create_handoff(user["id"])}
+    token = _bearer_token(request) or request.cookies.get(SESSION_COOKIE)
+    return {"st": request.app.state.auth.create_handoff(user["id"], token)}
 
 
 @router.post("/logout")

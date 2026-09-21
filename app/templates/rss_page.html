@@ -21,7 +21,7 @@
           {% for p in pages %}
           <tr>
             <td class="cell-main">{{ p.title }}</td>
-            <td class="mono small"><a href="/pdf/{{ p.slug }}" target="_blank" rel="noopener">/pdf/{{ p.slug }}</a></td>
+            <td class="mono small"><a href="{{ reference_path(p) }}" target="_blank" rel="noopener">{{ reference_path(p) }}</a></td>
             <td class="cell-sub">{{ (p.description or "")[:120] }}</td>
             <td class="cell-sub">{{ p.published_at }}</td>
           </tr>

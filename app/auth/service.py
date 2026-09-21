@@ -87,8 +87,8 @@ class AuthService:
     def __init__(self, repos: Repos, settings: Settings):
         self.repos = repos
         self.settings = settings
-        # one-time page handoff tokens: sha256(token) -> (user_id, expires_ts, used)
-        self._handoffs: dict[str, tuple[int, float, bool]] = {}
+        # One-time page grants, bound to the original (revocable) login session.
+        self._handoffs: dict[str, tuple[int, float, str]] = {}
 
     # -- sessions ------------------------------------------------------------
 
@@ -102,28 +102,29 @@ class AuthService:
         for k in [k for k, (_, exp, _) in self._handoffs.items() if exp < now]:
             self._handoffs.pop(k, None)
 
-    def create_handoff(self, user_id: int) -> str:
+    def create_handoff(self, user_id: int, session_token: str) -> str:
         """Mint a one-time, 60-second token that authenticates a single page
         request via ``?st=``. Used by cookie-less embeds (browsers that block
         third-party cookies) to enter server-rendered pages."""
         self._prune_handoffs()
         token = secrets.token_urlsafe(24)
-        self._handoffs[token_hash(token)] = (user_id, time.time() + 60.0, False)
+        self._handoffs[token_hash(token)] = (user_id, time.time() + 60.0, session_token)
         return token
 
-    async def consume_handoff(self, token: str | None) -> int | None:
+    async def consume_handoff(self, token: str | None) -> tuple[int, str] | None:
         if not token or len(token) > 200:
             return None
         key = token_hash(token)
-        rec = self._handoffs.get(key)
+        rec = self._handoffs.pop(key, None)
         if not rec:
             return None
-        user_id, expires, used = rec
-        if used or time.time() > expires:
-            self._handoffs.pop(key, None)
+        user_id, expires, session_token = rec
+        if time.time() > expires:
             return None
-        self._handoffs[key] = (user_id, expires, True)
-        return user_id
+        session = await self.get_session(session_token)
+        if not session or session["user_id"] != user_id:
+            return None
+        return user_id, session_token
 
     async def create_session(self, user_id: int) -> tuple[str, str]:
         """Return (token, expires_at_iso)."""

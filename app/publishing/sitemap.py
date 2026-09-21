@@ -7,6 +7,8 @@ index pointing at ``/sitemap-N.xml`` chunks.
 """
 from __future__ import annotations
 
+from .pages import public_page_url
+
 from xml.sax.saxutils import escape, quoteattr
 
 SITEMAP_CHUNK_SIZE = 50_000
@@ -23,7 +25,7 @@ def render_sitemap(pages: list[dict], base_url: str, chunk: int = 1) -> str:
     for p in pages:
         # A page URL is derived from the currently configured public origin.
         # Do not reuse a historical stored hostname after a domain migration.
-        page_url = f"{base_url.rstrip('/')}/pdf/{p.get('slug')}"
+        page_url = public_page_url(base_url, p)
         lastmod = p.get("updated_at") or p.get("published_at")
         urls.append(_url_entry(page_url, lastmod))
     return (

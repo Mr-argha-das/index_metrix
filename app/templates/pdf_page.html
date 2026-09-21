@@ -37,20 +37,13 @@
         <div class="brand-logo" style="width:30px;height:30px;font-size:12px">BI</div>
         <span style="font-weight:750;font-size:14px">{{ app_name }}</span>
       </a>
-      <span class="small faint">{{ "Generated role + source reference" if demo_job else resource_type ~ " discovery reference page" }}</span>
+      <span class="small faint">{{ resource_type ~ " discovery reference page" }}</span>
     </div>
   </header>
 
   <div class="pdf-page-inner">
     <div class="pdf-page-hero">
-      {% if demo_job %}
-      <div class="card mb-16" style="border:2px solid var(--amber,#eab308)"><div class="card-body">
-        <strong>Generated role — not a live vacancy.</strong>
-        <p style="margin-bottom:0">Job details below are generated content, not facts extracted from the submitted source. The company, salary and requirements are not verified source facts. No applications are accepted.</p>
-      </div></div>
-      {% endif %}
       <div class="flex wrap" style="gap:8px;margin-bottom:14px">
-        {% if demo_job %}<span class="pill amber">Generated job #{{ demo_job.number }}</span>{% endif %}
         <span class="pill green"><span class="dot"></span>{{ "Source: validated" if demo_job else "Validated" }} {{ resource_type }}</span>
         {% if classification %}<span class="pill {{ 'green' if classification == 'TEXT_PDF' else 'amber' }}">{{ classification.replace('_', ' ') }}</span>{% endif %}
         <span class="pill slate"><span class="dot"></span>Source: {{ source_domain }}</span>
@@ -58,7 +51,6 @@
       <h1>{{ title }}</h1>
       <p class="desc">{{ description }}</p>
 
-      {% if demo_job %}<p><strong>Separate source resource:</strong> the link below is the URL submitted by the operator. It is not an official document for this generated role, and no employer relationship is claimed.</p>{% endif %}
       <div class="pdf-cta-row">
         <!-- Main CTA: a normal HTML link to the ORIGINAL third-party PDF.
              No JavaScript. The file is hosted by the source publisher, not us. -->
@@ -66,7 +58,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
           {{ "View Original PDF" if resource_type == "PDF" else "Open Original Web Page" }}
         </a>
-        {% if demo_job %}<a class="pdf-cta alt" href="#demo-apply">Application information</a>{% endif %}
         <a class="pdf-cta alt" href="/sitemap.xml">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3-3 3"/><path d="M2 12c0-1.7 1.3-3 3-3h14M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2h-4"/></svg>
           Sitemap

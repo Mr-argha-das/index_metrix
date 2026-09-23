@@ -165,15 +165,6 @@ async def projection(page, settings, repos, notification_job=None):
         "indexStatus": page.get("gsc_index_status") or "UNKNOWN",
         "crawlStatus": page.get("gsc_crawl_status") or "UNKNOWN",
     }
-
-
-async def require_real_page(request, page_id):
-    page = await request.app.state.repos.pages.get(page_id)
-    if not page or page.get("page_kind") != "real-job":
-        raise HTTPException(404, "Real vacancy not found. Demo jobs cannot be converted or submitted through this endpoint.")
-    return page
-
-
 @router.get("/api/real-jobs/dashboard")
 async def dashboard_real_jobs(request: Request, user=Depends(require_admin)):
     repos = request.app.state.repos
@@ -271,77 +262,6 @@ async def import_jobs(request: Request, file: UploadFile = File(...), authorized
         "totalRows": len(df),
     }
 
-
-@router.put("/api/real-jobs/{page_id}")
-async def update_job(page_id: int, request: Request, payload: dict, user=Depends(require_admin)):
-    manager = request.app.state.queue
-    async with manager.indexing_lock:
-        page = await require_real_page(request, page_id)
-        if not is_open(page):
-            raise HTTPException(409, "Closed vacancies cannot be silently reopened. Publish a separately reviewed new opening.")
-        data = dict(payload or {})
-        data["authorized_real_vacancy"] = data.get("authorized_real_vacancy") is True
-        if not data["authorized_real_vacancy"]:
-            raise HTTPException(400, "Authorization/attestation is required to update a real vacancy.")
-        if not data.get("job_details") and data.get("apply_url"):
-            data["job_details"] = data["apply_url"]
-        if not data.get("apply_url") and data.get("job_details"):
-            data["apply_url"] = data["job_details"]
-        if data.get("date_posted") != job_data(page).get("date_posted"):
-            raise HTTPException(400, "The original posting date is immutable; do not manufacture freshness.")
-        if data != job_data(page):
-            page = await manager.repos.pages.update(
-                page_id,
-                real_job=json_dumps(data),
-                title=data.get("title", ""),
-                description=data.get("description", "")[:300],
-                reviewed_by=user["id"],
-                reviewed_at=utcnow_iso(),
-                updated_at=utcnow_iso(),
-                indexing_revision=page["indexing_revision"] + 1,
-                indexing_status="QUEUED",
-            )
-            await ensure_notification(manager, page)
-    return await projection(await manager.repos.pages.get(page_id), manager.settings, manager.repos)
-
-
-@router.post("/api/real-jobs/{page_id}/close")
-async def close_job(page_id: int, request: Request, user=Depends(require_admin)):
-    manager = request.app.state.queue
-    async with manager.indexing_lock:
-        page = await require_real_page(request, page_id)
-        if page.get("job_status") != "CLOSED":
-            page = await manager.repos.pages.update(
-                page_id,
-                job_status="CLOSED",
-                indexing_revision=page["indexing_revision"] + 1,
-                updated_at=utcnow_iso(),
-                sitemap_included=False,
-                rss_included=False,
-            )
-        await ensure_notification(manager, page)
-    return await projection(await manager.repos.pages.get(page_id), manager.settings, manager.repos)
-
-
-@router.post("/api/real-jobs/{page_id}/retry")
-async def retry_job(page_id: int, request: Request, user=Depends(require_admin)):
-    manager = request.app.state.queue
-    async with manager.indexing_lock:
-        page = await require_real_page(request, page_id)
-        try:
-            await ensure_notification(manager, page, retry=True)
-        except IndexingError as exc:
-            raise HTTPException(400, str(exc)) from None
-    return await projection(await manager.repos.pages.get(page_id), manager.settings, manager.repos)
-
-
-@router.post("/api/real-jobs/{page_id}/inspect")
-async def inspect_job(page_id: int, request: Request, user=Depends(require_admin)):
-    manager = request.app.state.queue
-    async with manager.indexing_lock:
-        page = await require_real_page(request, page_id)
-        job = await manager.enqueue("GSC_INSPECT", payload={"page_id": page["id"]}, max_attempts=2)
-    return {"queued": True, "jobId": job["id"], "pageId": page["id"]}
 
 
 def render_real_job(request, page):

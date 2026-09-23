@@ -1,15 +1,129 @@
-<!doctype html><html lang="en" data-theme="dark"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ job.title }} · {{ job.company }} — {{ app_name }}</title>
-<meta name="description" content="{{ page.description }}"><meta name="robots" content="{{ 'index,follow' if active else 'noindex,follow' }}">
-<link rel="canonical" href="{{ canonical_url }}"><link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/dashboard.css"><link rel="stylesheet" href="/static/css/responsive.css">
-<meta property="og:title" content="{{ job.title }} · {{ job.company }}"><meta property="og:url" content="{{ canonical_url }}"><meta property="og:type" content="website">
-{% if active %}<script type="application/ld+json">{{ job_schema | tojson }}</script>{% endif %}
-</head><body class="pdf-page-shell"><main class="pdf-page-inner">
-<header class="pdf-page-hero"><a href="/references">← Published pages</a><p class="small">{{ app_name }} · Job #{{ page.job_number }}</p><h1>{{ job.title }}</h1><p>{{ job.company }} · {{ job.city }}, {{ job.region }}, {{ job.country }}</p>
-{% if active %}<a class="pdf-cta" href="{{ job.apply_url }}" rel="noopener" target="_blank">Apply with employer</a>{% else %}<p class="evidence-card"><strong>This vacancy is closed.</strong> Applications are no longer available from this page.</p>{% endif %}
-</header>
-<section class="card mb-16"><div class="card-head"><h2>Job details</h2></div><div class="card-body"><dl class="meta-list"><dt>Employer</dt><dd><a href="{{ job.company_url }}" rel="noopener" target="_blank">{{ job.company }}</a></dd><dt>Employment</dt><dd>{{ job.employment_type.replace('_', ' ') }}</dd><dt>Work location</dt><dd>{{ job.city }}, {{ job.region }}, {{ job.country }}</dd><dt>Originally posted</dt><dd><time datetime="{{ job.date_posted }}">{{ job.date_posted }}</time></dd><dt>Closing date</dt><dd><time datetime="{{ job.valid_through }}">{{ job.valid_through }}</time> (end of day UTC)</dd></dl><h2>Description and responsibilities</h2><p style="white-space:pre-line">{{ job.description }}</p><h2>Qualifications and experience</h2><p style="white-space:pre-line">{{ job.qualifications }}</p></div></section>
-<p class="small faint">Vacancy information supplied and confirmed by the publishing operator. Applications take place on the linked employer/recruiter site; {{ app_name }} does not collect applications or payments here.</p>
-<p class="small faint">Published <time datetime="{{ page.published_at }}">{{ page.published_at }}</time> · <a href="/rss.xml">RSS</a></p>
-</main></body></html>
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ job.title }} — {{ job.company }} | {{ app_name }}</title>
+  <meta name="description" content="{{ (job.description or '')[:300] }}">
+  <meta name="robots" content="{{ 'index,follow,max-image-preview:large' if active else 'noindex,follow' }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <meta property="og:title" content="{{ job.title }} — {{ job.company }}">
+  <meta property="og:description" content="{{ (job.description or '')[:300] }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:type" content="article">
+  <meta name="twitter:card" content="summary">
+  {% if active %}
+  <script type="application/ld+json">{{ job_schema | tojson }}</script>
+  <script type="application/ld+json">{{ {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Jobs", "item": canonical_url.rsplit("/jobs/", 1)[0] ~ "/references"},
+      {"@type": "ListItem", "position": 2, "name": job.title, "item": canonical_url}
+    ]
+  } | tojson }}</script>
+  {% endif %}
+  <style>
+    :root{--bg:#07131d;--surface:#0d1d2a;--surface2:#122737;--border:#1d3c50;--text:#e9f7fa;--muted:#91afbd;--faint:#628392;--accent:#06b6d4;--green:#2dd4a8;--amber:#fbbf24;--shadow:0 24px 70px rgba(0,0,0,.28)}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 500px at 80% -10%,rgba(6,182,212,.14),transparent 60%),var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.65}
+    a{color:#6ee7f7;text-decoration:none}a:hover{text-decoration:underline}
+    .wrap{width:min(1120px,calc(100% - 32px));margin:0 auto}.top{padding:28px 0 18px}.brand{font-size:13px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}.crumb{margin-top:8px;font-size:13px;color:var(--faint)}
+    .hero{position:relative;margin:18px 0 20px;padding:42px;border:1px solid var(--border);border-radius:22px;background:linear-gradient(135deg,rgba(18,39,55,.98),rgba(8,24,36,.98));box-shadow:var(--shadow);overflow:hidden}
+    .hero:after{content:"";position:absolute;width:220px;height:220px;border-radius:50%;right:-90px;top:-110px;background:rgba(6,182,212,.12);filter:blur(4px)}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:rgba(45,212,168,.1);color:#7ff0cd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 14px rgba(45,212,168,.65)}
+    h1{font-size:clamp(32px,5vw,54px);line-height:1.08;letter-spacing:-.035em;margin:18px 0 12px;max-width:850px}.company{font-size:19px;color:var(--muted)}
+    .hero-meta{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0 0}.chip{padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.025);color:var(--muted);font-size:13px}
+    .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 18px;border-radius:11px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-weight:700}.btn:hover{text-decoration:none;border-color:#2c7187}.btn.primary{background:var(--accent);color:#04202a;border-color:var(--accent)}
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:20px;padding-bottom:42px}.card{border:1px solid var(--border);border-radius:18px;background:rgba(13,29,42,.92);box-shadow:0 10px 35px rgba(0,0,0,.14)}.card+.card{margin-top:18px}.card-head{padding:22px 24px;border-bottom:1px solid var(--border)}.card-body{padding:24px}
+    h2{font-size:19px;margin:0 0 16px}h3{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px}.copy{white-space:pre-line;color:#cfe1e6}.copy p{margin:0}
+    dl{margin:0}.row{display:grid;grid-template-columns:120px 1fr;gap:18px;padding:13px 0;border-bottom:1px solid rgba(29,60,80,.65)}.row:last-child{border-bottom:0}.row dt{color:var(--faint);font-size:13px}.row dd{margin:0;color:#dbecef}
+    .source{word-break:break-word}.source-box{padding:18px;border-radius:13px;border:1px solid var(--border);background:rgba(6,182,212,.045)}.source-box strong{display:block;margin-bottom:5px}.source-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+    .notice{padding:16px;border-radius:13px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.22);color:#f7ddb0}.small{font-size:12px;color:var(--faint)}footer{padding:0 0 45px;text-align:center}
+    @media(max-width:800px){.layout{grid-template-columns:1fr}.hero{padding:28px 22px}.card-body{padding:20px}.row{grid-template-columns:1fr;gap:2px}.wrap{width:min(100% - 22px,1120px)}}
+  </style>
+</head>
+<body>
+  <div class="wrap top">
+    <div class="brand">{{ app_name }} · Public vacancy</div>
+    <div class="crumb">Jobs / #{{ page.job_number }}</div>
+  </div>
+
+  <main class="wrap">
+    <article class="hero">
+      {% if active %}<span class="eyebrow"><span class="dot"></span> Open vacancy</span>{% else %}<span class="eyebrow" style="background:rgba(251,191,36,.1);color:#f7d77f"><span class="dot" style="background:var(--amber)"></span> Closed vacancy</span>{% endif %}
+      <h1>{{ job.title }}</h1>
+      <div class="company">
+        <a href="{{ company_url }}" target="_blank" rel="noopener">{{ job.company }}</a>
+        · {{ job.city }}, {{ job.region }}, {{ job.country }}
+      </div>
+      <div class="hero-meta">
+        <span class="chip">{{ job.employment_type.replace('_', ' ') }}</span>
+        <span class="chip">Posted {{ job.date_posted }}</span>
+        <span class="chip">Valid through {{ job.valid_through }}</span>
+      </div>
+      <div class="actions">
+        {% if active and job_details_url %}
+          <a class="btn primary" href="{{ job_details_url }}" target="_blank" rel="noopener">View original job / Apply ↗</a>
+        {% elif not active %}
+          <span class="notice">This vacancy is closed and is no longer accepting applications from this page.</span>
+        {% endif %}
+        {% if active and job.apply_url and job.apply_url != job_details_url %}
+          <a class="btn" href="{{ job.apply_url }}" target="_blank" rel="noopener">Direct application ↗</a>
+        {% endif %}
+      </div>
+    </article>
+
+    <div class="layout">
+      <div>
+        <section class="card">
+          <div class="card-head"><h2>Job description & responsibilities</h2></div>
+          <div class="card-body copy">{{ job.description }}</div>
+        </section>
+        <section class="card">
+          <div class="card-head"><h2>Qualifications & experience</h2></div>
+          <div class="card-body copy">{{ job.qualifications }}</div>
+        </section>
+      </div>
+
+      <aside>
+        <section class="card">
+          <div class="card-head"><h2>Job information</h2></div>
+          <div class="card-body">
+            <dl>
+              <div class="row"><dt>Company</dt><dd><a href="{{ company_url }}" target="_blank" rel="noopener">{{ job.company }}</a></dd></div>
+              <div class="row"><dt>Employment</dt><dd>{{ job.employment_type.replace('_', ' ') }}</dd></div>
+              <div class="row"><dt>Location</dt><dd>{{ job.city }}, {{ job.region }}, {{ job.country }}</dd></div>
+              <div class="row"><dt>Posted</dt><dd><time datetime="{{ job.date_posted }}">{{ job.date_posted }}</time></dd></div>
+              <div class="row"><dt>Valid through</dt><dd><time datetime="{{ job.valid_through }}">{{ job.valid_through }}</time></dd></div>
+            </dl>
+          </div>
+        </section>
+
+        {% if job_details_url %}
+        <section class="card">
+          <div class="card-body">
+            <div class="source-box">
+              <span class="source-label">Employer source</span>
+              <strong>Original vacancy details</strong>
+              <a class="source" href="{{ job_details_url }}" target="_blank" rel="noopener">{{ job_details_url }}</a>
+              <p class="small">This is the source link supplied for this vacancy. It may be a PDF, employer job page or application form.</p>
+            </div>
+          </div>
+        </section>
+        {% endif %}
+
+        <section class="card">
+          <div class="card-body small">
+            Vacancy information is supplied and confirmed by the publishing operator. Applications happen on the linked employer/recruiter site; {{ app_name }} does not collect applications or payments here.
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="wrap">
+    <div class="small">Job #{{ page.job_number }} · Published {{ page.published_at }} · <a href="/references">Browse jobs</a> · <a href="/rss.xml">RSS</a></div>
+  </footer>
+</body>
+</html>

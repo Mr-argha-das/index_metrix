@@ -54,7 +54,7 @@
       {% if active %}<span class="eyebrow"><span class="dot"></span> Open vacancy</span>{% else %}<span class="eyebrow" style="background:rgba(251,191,36,.1);color:#f7d77f"><span class="dot" style="background:var(--amber)"></span> Closed vacancy</span>{% endif %}
       <h1>{{ job.title }}</h1>
       <div class="company">
-        <a href="{{ company_url }}" target="_blank" rel="noopener">{{ job.company }}</a>
+        {% if company_url %}<a href="{{ company_url }}" target="_blank" rel="noopener">{{ job.company }}</a>{% else %}{{ job.company }}{% endif %}
         · {{ job.city }}, {{ job.region }}, {{ job.country }}
       </div>
       <div class="hero-meta">
@@ -91,7 +91,7 @@
           <div class="card-head"><h2>Job information</h2></div>
           <div class="card-body">
             <dl>
-              <div class="row"><dt>Company</dt><dd><a href="{{ company_url }}" target="_blank" rel="noopener">{{ job.company }}</a></dd></div>
+              <div class="row"><dt>Company</dt><dd>{% if company_url %}<a href="{{ company_url }}" target="_blank" rel="noopener">{{ job.company }}</a>{% else %}{{ job.company }}{% endif %}</dd></div>
               <div class="row"><dt>Employment</dt><dd>{{ job.employment_type.replace('_', ' ') }}</dd></div>
               <div class="row"><dt>Location</dt><dd>{{ job.city }}, {{ job.region }}, {{ job.country }}</dd></div>
               <div class="row"><dt>Posted</dt><dd><time datetime="{{ job.date_posted }}">{{ job.date_posted }}</time></dd></div>

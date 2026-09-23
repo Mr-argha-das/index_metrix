@@ -118,6 +118,8 @@ def _row_to_job(row: dict) -> dict:
     if not data.get("apply_url"):
         data["apply_url"] = data.get("job_details", "")
     data["authorized_real_vacancy"] = True
+    data["structured_data_verified"] = not bool(_validate_import_shape(data))
+    data["source_only"] = False
     return data
 
 
@@ -273,6 +275,8 @@ async def create_job(request: Request, payload: dict, user=Depends(require_admin
         data["job_details"] = data["apply_url"]
     if not data.get("apply_url") and data.get("job_details"):
         data["apply_url"] = data["job_details"]
+    data["structured_data_verified"] = all(bool(data.get(field)) for field in REQUIRED_IMPORT_FIELDS)
+    data["source_only"] = not data["structured_data_verified"]
 
     async with manager.indexing_lock:
         result, duplicate = await _create_real_job(manager, data, user)

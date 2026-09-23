@@ -541,6 +541,15 @@ async def settings_page(request: Request, user: dict = Depends(require_admin_pag
 # ---------------------------------------------------------------------------
 
 
+@app.get("/dashboard", include_in_schema=False)
+async def dashboard_page(request: Request, user: dict = Depends(require_user_page)):
+    return templates.render(
+        request,
+        "dashboard.html",
+        {"user": user, "current_user": user},
+    )
+
+
 @app.get("/", include_in_schema=False)
 async def home(request: Request):
     user = await get_session_user(request)

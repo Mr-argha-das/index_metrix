@@ -54,6 +54,11 @@ IS_UNKNOWN = "INDEX_UNKNOWN"
 IS_INDEXED = "INDEXED"
 IS_NOT_INDEXED = "NOT_INDEXED"
 
+# Transient failures for these jobs are retried automatically forever with
+# bounded exponential backoff. Permanent validation/auth/data errors still
+# become FAILED and are not blindly hammered.
+AUTO_RETRY_JOB_TYPES = {"GOOGLE_INDEX_NOTIFY", JOB_GSC_INSPECT}
+
 
 class PipelineRetryable(Exception):
     """Transient failure — the job should be retried with backoff."""
@@ -127,7 +132,8 @@ async def _handle_retry(manager: QueueManager, job: dict, message: str) -> None:
     repos = manager.repos
     attempts = (job.get("attempts") or 0) + 1
     pdf_id = job.get("pdf_id") or None
-    if attempts >= (job.get("max_attempts") or 1):
+    auto_retry = job.get("job_type") in AUTO_RETRY_JOB_TYPES
+    if attempts >= (job.get("max_attempts") or 1) and not auto_retry:
         manager._stats["failed"] += 1
         await repos.jobs.update(
             job["id"],
@@ -148,6 +154,9 @@ async def _handle_retry(manager: QueueManager, job: dict, message: str) -> None:
             )
         log.error("job_id=%s FAILED after %d attempts: %s", job["id"], attempts, message)
         return
+    # For indexing/GSC jobs this path intentionally never exhausts on
+    # transient errors. The attempt counter is retained for observability,
+    # while the persisted job stays RETRY_WAITING and survives restarts.
     delay = backoff_seconds(attempts, base=manager.settings.retry_backoff_base)
     await repos.jobs.update(
         job["id"],

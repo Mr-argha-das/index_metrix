@@ -72,6 +72,30 @@
   </div>
 
   <div class="col">
+    {% if user and user.role == "ADMIN" %}
+    <div class="card">
+      <div class="card-head">
+        <div><h3>Real job indexing</h3><div class="sub">your public /jobs pages · Google notification + Search Console evidence</div></div>
+        <a class="btn btn-sm" href="/real-jobs">Manage</a>
+      </div>
+      <div class="card-body">
+        <div class="queue-mini" id="real-job-dashboard-kpis">
+          <div class="qm"><div class="qm-num" id="dash-rj-total">0</div><div class="qm-lbl">Total</div></div>
+          <div class="qm"><div class="qm-num" id="dash-rj-sent">0</div><div class="qm-lbl">Google accepted</div></div>
+          <div class="qm"><div class="qm-num" id="dash-rj-indexed">0</div><div class="qm-lbl">Indexed</div></div>
+          <div class="qm"><div class="qm-num" id="dash-rj-unknown">0</div><div class="qm-lbl">Unknown</div></div>
+        </div>
+        <div class="table-wrap mt-16">
+          <table class="data">
+            <thead><tr><th>Job</th><th>Request</th><th>Crawl</th><th>Index</th></tr></thead>
+            <tbody id="real-job-dashboard-rows"><tr><td colspan="4" class="small faint">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <p class="small faint mt-16">Accepted means Google accepted the notification. It does not mean the page is indexed. Index/Crawl values require Search Console evidence.</p>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="card">
       <div class="card-head"><div><h3>Processing queue</h3><div class="sub">in-flight jobs and throughput</div></div></div>
       <div class="card-body">

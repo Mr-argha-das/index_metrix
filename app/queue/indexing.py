@@ -18,6 +18,44 @@ from .manager import JOB_INDEX_NOTIFY, backoff_seconds
 ENABLED_KEY = "internal_google_indexing_enabled"
 QUOTA_KEY = "internal_google_indexing_attempts"
 
+# Search Console is eventually consistent. After a successful Indexing API
+# notification, re-inspect the public /jobs page on a persisted schedule.
+# This never claims that Google will index the page on any particular interval.
+GSC_POLL_DELAYS = (30, 60, 120, 300, 600, 1800, 3600, 21600, 86400)
+GSC_JOB_ACTIVE = ("PENDING", "RUNNING", "RETRY_WAITING")
+
+
+def gsc_poll_delay(sequence: int) -> int:
+    sequence = max(0, int(sequence or 0))
+    return GSC_POLL_DELAYS[min(sequence, len(GSC_POLL_DELAYS) - 1)]
+
+
+async def schedule_gsc_inspection(manager, page_id: int, sequence: int = 0, delay: int | None = None) -> bool:
+    """Schedule one persistent GSC inspection without creating duplicates."""
+    active = await manager.repos.jobs.find(
+        lambda j: j.get("job_type") == JOB_GSC_INSPECT
+        and j.get("status") in GSC_JOB_ACTIVE
+        and (json_loads(j.get("payload"), {}) or {}).get("page_id") == page_id
+    )
+    if active:
+        return False
+    wait = gsc_poll_delay(sequence) if delay is None else max(0, int(delay))
+    job = await manager.enqueue(
+        JOB_GSC_INSPECT,
+        payload={"page_id": page_id, "poll_sequence": int(sequence)},
+        max_attempts=1,
+        priority=5,
+    )
+    if wait:
+        await manager.repos.jobs.update(
+            job["id"],
+            status="RETRY_WAITING",
+            next_attempt_at=(utcnow() + timedelta(seconds=wait)).isoformat(),
+            error=f"Scheduled GSC poll #{int(sequence) + 1}; waiting {wait}s.",
+        )
+        manager.schedule(job["id"], 5, wait)
+    return True
+
 
 async def enabled(manager):
     row = await manager.repos.settings.get_key(ENABLED_KEY)
@@ -178,6 +216,6 @@ async def process_notification(manager, job_id):
         if payload["type"] == "URL_UPDATED":
             # Queue a separate evidence-only Search Console inspection. This
             # never changes ACCEPTED into INDEXED unless GSC supplies evidence.
-            await manager.enqueue("GSC_INSPECT", payload={"page_id": page["id"]}, max_attempts=2)
+            await schedule_gsc_inspection(manager, page["id"], sequence=0, delay=30)
         manager._stats["completed"] += 1
         await repos.events.add("GOOGLE_NOTIFICATION_ACCEPTED", "Indexing notification accepted; index status remains UNKNOWN.", user_id=page["reviewed_by"], metadata={"pageId": page["id"], "type": payload["type"]})

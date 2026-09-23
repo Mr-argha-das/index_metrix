@@ -7,49 +7,39 @@
 <div class="card" style="max-width:980px">
   <div class="card-head">
     <div>
-      <h3>Publish vacancies</h3>
-      <div class="sub">Upload a CSV or XLSX sheet. Every valid row becomes a public /jobs/&lt;number&gt; page and is automatically sent to the Google indexing queue.</div>
+      <h3>Add job links</h3>
+      <div class="sub">Paste one or multiple employer vacancy/application URLs. Each unique URL creates one internal /jobs/&lt;number&gt; page.</div>
     </div>
   </div>
   <div class="card-body">
-    <form id="vacancy-import-form">
+    <form id="link-import-form">
       <div class="field">
-        <label for="vacancy-file">Vacancy sheet</label>
-        <input class="input" id="vacancy-file" type="file" accept=".csv,.xlsx" required>
-        <div class="small faint mt-8">CSV or Excel (.xlsx), maximum 10 MB.</div>
+        <label for="job-links">Job links</label>
+        <textarea class="input" id="job-links" rows="9" placeholder="https://employer.example/jobs/python-developer&#10;https://employer.example/jobs/backend-engineer&#10;https://example.com/job.pdf" required></textarea>
+        <div class="small faint mt-8">One URL per line. Commas and spaces are also accepted. Duplicate URLs are ignored.</div>
       </div>
 
       <div class="card mt-16" style="background:rgba(255,255,255,.02)">
         <div class="card-body">
-          <h3>Required columns</h3>
+          <h3>Automatic job creation</h3>
           <div class="small" style="line-height:1.9">
-            <code>title</code>,
-            <code>company</code>,
-            <code>company_url</code>,
-            <code>job_details</code>,
-            <code>description</code>,
-            <code>qualifications</code>,
-            <code>employment_type</code>,
-            <code>city</code>,
-            <code>region</code>,
-            <code>country</code>,
-            <code>date_posted</code>,
-            <code>valid_through</code>
+            Every link is written to both <code>job_details</code> and <code>apply_url</code>.
+            The remaining fields are generated using the vacancy generator logic you supplied.
           </div>
           <div class="small faint mt-8">
-            Optional: <code>apply_url</code>. If omitted, <code>job_details</code> is used as the application/source link.
+            The generated title/company/location/description are synthetic placeholders. Verify them against the employer source before treating a vacancy as a genuine public listing.
           </div>
         </div>
       </div>
 
       <label class="check mt-16">
-        <input id="authorized-bulk" type="checkbox" required>
-        <span>I confirm these vacancies are genuine and I am authorized to publish them.</span>
+        <input id="authorized-links" type="checkbox" required>
+        <span>I confirm the linked vacancies are genuine and I am authorized to publish them.</span>
       </label>
 
       <div class="flex-between mt-16 wrap">
-        <div id="import-status" class="small faint"></div>
-        <button class="btn btn-primary" id="import-btn" type="submit">Publish vacancies</button>
+        <div id="link-status" class="small faint"></div>
+        <button class="btn btn-primary" id="link-btn" type="submit">Create jobs &amp; queue indexing</button>
       </div>
     </form>
   </div>
@@ -72,47 +62,51 @@
 </div>
 {% endblock %}
 
+<div class="card mt-16" style="max-width:980px">
+  <div class="card-body small">
+    <strong>What happens after publishing?</strong>
+    <p>One link = one internal public job page. The same employer URL is stored as <code>job_details</code> and <code>apply_url</code> and shown as a normal outbound link.</p>
+    <p>The internal <code>/jobs/&lt;number&gt;</code> URL enters the Google indexing queue. Temporary Google failures are retried automatically.</p>
+    <p style="margin-bottom:0">Google accepting a notification is not proof that the page is indexed. Dashboard status separates notification, queue, crawl and index evidence.</p>
+  </div>
+</div>
+
 {% block scripts %}
 <script>
 (() => {
-  const form = document.getElementById("vacancy-import-form");
-  const file = document.getElementById("vacancy-file");
-  const auth = document.getElementById("authorized-bulk");
-  const btn = document.getElementById("import-btn");
-  const status = document.getElementById("import-status");
+  const form = document.getElementById("link-import-form");
+  const links = document.getElementById("job-links");
+  const auth = document.getElementById("authorized-links");
+  const btn = document.getElementById("link-btn");
+  const status = document.getElementById("link-status");
   const result = document.getElementById("import-result");
   const body = document.getElementById("import-result-body");
-
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!file.files.length) return;
     btn.disabled = true;
-    btn.textContent = "Publishing…";
-    status.textContent = "Uploading and publishing vacancies…";
+    btn.textContent = "Creating jobs…";
+    status.textContent = "Creating internal job pages and queueing Google notifications…";
+    status.style.color = "";
     result.style.display = "none";
 
     try {
       const fd = new FormData();
-      fd.append("file", file.files[0]);
+      fd.append("links", links.value);
       fd.append("authorized_bulk", auth.checked ? "true" : "false");
-
       const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
       const headers = csrf ? {"X-CSRF-Token": csrf} : {};
       const token = window.App?.sessionToken?.();
       if (token) headers.Authorization = "Bearer " + token;
 
-      const response = await fetch("/api/real-jobs/import", {
-        method: "POST",
-        headers,
-        body: fd,
-        credentials: "same-origin"
+      const response = await fetch("/api/real-jobs/links", {
+        method: "POST", headers, body: fd, credentials: "same-origin"
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Import failed.");
+      if (!response.ok) throw new Error(data.detail || "Could not create jobs.");
 
       const created = data.created || [];
       const duplicates = data.duplicates || [];
@@ -120,13 +114,13 @@
 
       body.innerHTML = `
         <div class="kpi-grid">
-          <div class="kpi"><div class="kpi-label">Published</div><div class="kpi-value">${created.length}</div></div>
+          <div class="kpi"><div class="kpi-label">Created</div><div class="kpi-value">${created.length}</div></div>
           <div class="kpi"><div class="kpi-label">Duplicates</div><div class="kpi-value">${duplicates.length}</div></div>
           <div class="kpi"><div class="kpi-label">Errors</div><div class="kpi-value">${errors.length}</div></div>
         </div>
         <div class="mt-16">
           ${created.slice(0,100).map(x => `<div class="small">#${esc(x.number)} · <a href="${esc(x.publicUrl || x.url)}" target="_blank" rel="noopener">${esc(x.job?.title || "View job")}</a> · Google: ${esc(x.notificationStatus || "QUEUED")}</div>`).join("")}
-          ${errors.slice(0,20).map(x => `<div class="small" style="color:var(--red)">Row ${esc(x.row ?? "—")}: ${esc(x.error)}</div>`).join("")}
+          ${errors.slice(0,20).map(x => `<div class="small" style="color:var(--red)">${esc(x.url || "")}: ${esc(x.error)}</div>`).join("")}
         </div>`;
       result.style.display = "block";
       status.textContent = "Done. Dashboard is updating automatically.";
@@ -135,7 +129,7 @@
       status.style.color = "var(--red)";
     } finally {
       btn.disabled = false;
-      btn.textContent = "Publish vacancies";
+      btn.textContent = "Create jobs & queue indexing";
     }
   });
 })();

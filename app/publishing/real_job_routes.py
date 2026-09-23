@@ -9,7 +9,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from .. import templates
-from ..auth.routes import require_admin
+from ..auth.routes import require_admin, require_admin_page
 from ..queue.indexing import ensure_notification
 from ..utils import json_dumps, json_loads, utcnow_iso
 from .pages import public_page_path, public_page_url
@@ -164,6 +164,15 @@ async def projection(page, settings, repos, notification_job=None):
         "indexStatus": page.get("gsc_index_status") or "UNKNOWN",
         "crawlStatus": page.get("gsc_crawl_status") or "UNKNOWN",
     }
+@router.get("/submit", include_in_schema=False)
+async def submit_page(request: Request, user=Depends(require_admin_page)):
+    return templates.render(
+        request,
+        "add_url.html",
+        {"user": user, "current_user": user, "nav": "submit"},
+    )
+
+
 @router.get("/api/real-jobs/dashboard")
 async def dashboard_real_jobs(request: Request, user=Depends(require_admin)):
     repos = request.app.state.repos

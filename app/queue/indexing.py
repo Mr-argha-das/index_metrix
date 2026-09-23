@@ -56,6 +56,29 @@ async def reconcile(manager):
             if page.get("job_status") == "OPEN" and not is_open(page):
                 page = await manager.repos.pages.update(page["id"], job_status="CLOSED", indexing_revision=(page.get("indexing_revision") or 1) + 1,
                                                        updated_at=utcnow_iso(), sitemap_included=False, rss_included=False)
+
+            # Migrate legacy indexing failures from the old finite-retry
+            # behavior into the new automatic retry loop. The current worker
+            # only reaches FAILED for non-retryable errors.
+            failed = await manager.repos.jobs.find(
+                lambda j: j.get("job_type") == JOB_INDEX_NOTIFY
+                and j.get("status") == "FAILED"
+                and (json_loads(j.get("payload"), {}) or {}).get("page_id") == page["id"]
+            )
+            for old_job in failed:
+                old_result = json_loads(page.get("indexing_result"), {}) or {}
+                http_status = old_result.get("httpStatus")
+                if old_result.get("retryable") is True or http_status in (408, 429) or (isinstance(http_status, int) and http_status >= 500) or not old_result:
+                    await manager.repos.jobs.update(
+                        old_job["id"],
+                        status="RETRY_WAITING",
+                        next_attempt_at=utcnow_iso(),
+                        completed_at=None,
+                        error="Migrated to automatic retry loop.",
+                    )
+                    await manager.repos.pages.update(page["id"], touch=False, indexing_status="RETRY_WAITING")
+                    manager.schedule(old_job["id"], 5)
+
             await ensure_notification(manager, page)
 
 

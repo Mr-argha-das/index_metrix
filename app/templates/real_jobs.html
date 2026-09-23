@@ -1,33 +1,83 @@
 {% extends "base.html" %}
 {% set title = "Real jobs" %}
-{% set subtitle = "Publish actual vacancies · automatic Google notifications" %}
+{% set subtitle = "Publish genuine vacancies · public SEO pages · automatic indexing workflow" %}
 {% set nav = "real-jobs" %}
 {% block content %}
-<div class="evidence-card mb-16">This form is for actual, authorized vacancies with a genuine application link. Nothing is randomly generated. Existing demo jobs and PDF/webpage submissions are never sent to the Indexing API. <a href="/google-indexing">Configure Google credentials →</a></div>
+<div class="evidence-card mb-16">
+  <strong>Real vacancy publishing</strong> — every row becomes a public <code>/jobs/&lt;number&gt;</code> page.
+  The employer's <strong>Job Details</strong> URL is rendered as a normal crawlable <code>&lt;a href&gt;</code>.
+  Demo jobs and generic source submissions never enter this Google JobPosting notification workflow.
+</div>
+
+<div class="kpi-grid mb-16" id="real-job-kpis">
+  <div class="kpi k-total"><div class="kpi-top"><span class="kpi-label">Total vacancies</span></div><div class="kpi-value" id="rj-total">0</div><div class="kpi-foot">published real jobs</div></div>
+  <div class="kpi k-valid"><div class="kpi-top"><span class="kpi-label">Google accepted</span></div><div class="kpi-value" id="rj-sent">0</div><div class="kpi-foot">notification accepted</div></div>
+  <div class="kpi k-processing"><div class="kpi-top"><span class="kpi-label">Queued / waiting</span></div><div class="kpi-value" id="rj-queued">0</div><div class="kpi-foot">will retry or send</div></div>
+  <div class="kpi k-indexed"><div class="kpi-top"><span class="kpi-label">Indexed</span></div><div class="kpi-value" id="rj-indexed">0</div><div class="kpi-foot">GSC evidence only</div></div>
+  <div class="kpi k-invalid"><div class="kpi-top"><span class="kpi-label">Not indexed</span></div><div class="kpi-value" id="rj-not-indexed">0</div><div class="kpi-foot">GSC evidence only</div></div>
+  <div class="kpi k-unknown"><div class="kpi-top"><span class="kpi-label">Unknown</span></div><div class="kpi-value" id="rj-unknown">0</div><div class="kpi-foot">no authoritative evidence</div></div>
+</div>
+
+<div class="card mb-16">
+  <div class="card-head">
+    <div><h3>Import vacancy sheet</h3><div class="sub">CSV, XLSX or XLS · one row per genuine vacancy</div></div>
+  </div>
+  <div class="card-body">
+    <div class="grid-2">
+      <div>
+        <input class="input" type="file" id="real-job-sheet" accept=".csv,.xlsx,.xls">
+        <p class="hint">Required columns: title, company, company_url, job_details, description, qualifications, employment_type, city, region, country, date_posted, valid_through. <strong>job_details</strong> can be an employer PDF, application form, job page or other genuine vacancy source.</p>
+      </div>
+      <div class="evidence-card">
+        <strong>Recommended Job Details value</strong>
+        <div class="small mt-8">https://employer.example/careers/python-developer.pdf</div>
+        <div class="small">or https://employer.example/apply/123</div>
+        <div class="small">It will appear publicly as a normal followable link.</div>
+      </div>
+    </div>
+    <div class="flex wrap mt-16">
+      <button class="btn btn-primary" id="import-real-jobs" type="button">Import & publish vacancies</button>
+      <a class="btn" href="/api/real-jobs" target="_blank" rel="noopener">Open JSON status</a>
+    </div>
+    <div id="real-job-import-result" class="small faint mt-16" role="status"></div>
+  </div>
+</div>
+
 <div class="card mb-16">
   <div class="card-head"><h3 id="form-heading">Publish a real vacancy</h3></div>
   <form id="real-job-form" class="card-body">
     <div class="grid-2">
-      <div class="field"><label for="job-title">Job title</label><input class="input" id="job-title" name="title" minlength="3" maxlength="160" required></div>
-      <div class="field"><label for="job-company">Hiring organization</label><input class="input" id="job-company" name="company" minlength="2" maxlength="160" required></div>
-      <div class="field"><label for="job-company-url">Employer website (HTTPS)</label><input class="input" type="url" id="job-company-url" name="company_url" maxlength="2000" required></div>
-      <div class="field"><label for="job-apply-url">Genuine application URL (HTTPS)</label><input class="input" type="url" id="job-apply-url" name="apply_url" maxlength="2000" required><span class="hint">Verify that applicants can actually apply here. Do not use unrelated PDFs or promotional links.</span></div>
+      <div class="field"><label for="job-title">Job title</label><input class="input" id="job-title" name="title" required></div>
+      <div class="field"><label for="job-company">Company / hiring organization</label><input class="input" id="job-company" name="company" required></div>
+      <div class="field"><label for="job-company-url">Company website</label><input class="input" type="url" id="job-company-url" name="company_url" required></div>
+      <div class="field"><label for="job-details">Job Details / employer source URL</label><input class="input" type="url" id="job-details" name="job_details" placeholder="PDF, employer job page, form or other genuine vacancy link" required><span class="hint">This is rendered on the public job page as a normal <code>&lt;a href&gt;</code>.</span></div>
+      <div class="field"><label for="job-apply-url">Direct application URL (optional)</label><input class="input" type="url" id="job-apply-url" name="apply_url" placeholder="If different from Job Details"></div>
     </div>
-    <div class="field"><label for="job-description">Full job description and responsibilities (plain text, 200+ characters)</label><textarea class="input" id="job-description" name="description" rows="7" minlength="200" maxlength="20000" required></textarea></div>
-    <div class="field"><label for="job-qualifications">Actual qualifications and experience (30+ characters)</label><textarea class="input" id="job-qualifications" name="qualifications" rows="3" minlength="30" maxlength="5000" required></textarea></div>
+    <div class="field"><label for="job-description">Full job description and responsibilities</label><textarea class="input" id="job-description" name="description" rows="8" required></textarea></div>
+    <div class="field"><label for="job-qualifications">Qualifications and experience</label><textarea class="input" id="job-qualifications" name="qualifications" rows="4" required></textarea></div>
     <div class="grid-2">
       <div class="field"><label for="job-type">Employment type</label><select class="input" id="job-type" name="employment_type" required>{% for kind in ['FULL_TIME','PART_TIME','CONTRACTOR','TEMPORARY','INTERN','VOLUNTEER','PER_DIEM','OTHER'] %}<option value="{{ kind }}">{{ kind.replace('_', ' ') }}</option>{% endfor %}</select></div>
-      <div class="field"><label for="job-city">Actual work city (on-site vacancies)</label><input class="input" id="job-city" name="city" minlength="2" maxlength="120" required></div>
-      <div class="field"><label for="job-region">State / region</label><input class="input" id="job-region" name="region" minlength="2" maxlength="120" required></div>
-      <div class="field"><label for="job-country">Country (two-letter code)</label><input class="input" id="job-country" name="country" pattern="[A-Z]{2}" maxlength="2" placeholder="IN" required></div>
-      <div class="field"><label for="job-posted">Employer's original posting date</label><input class="input" type="date" id="job-posted" name="date_posted" required></div>
-      <div class="field"><label for="job-expiry">Closing date (end of day UTC)</label><input class="input" type="date" id="job-expiry" name="valid_through" required></div>
+      <div class="field"><label for="job-city">City</label><input class="input" id="job-city" name="city" required></div>
+      <div class="field"><label for="job-region">Region / state</label><input class="input" id="job-region" name="region" required></div>
+      <div class="field"><label for="job-country">Country</label><input class="input" id="job-country" name="country" placeholder="IN" required></div>
+      <div class="field"><label for="job-posted">Original date posted</label><input class="input" type="date" id="job-posted" name="date_posted" required></div>
+      <div class="field"><label for="job-expiry">Valid through</label><input class="input" type="date" id="job-expiry" name="valid_through" required></div>
     </div>
-    <label class="mb-16" style="display:block"><input type="checkbox" id="job-attestation" required> I am authorized to publish this real, open vacancy; the employer/details are accurate and the application link works. This is not fictional, expired or promotional content.</label>
-    <div class="flex wrap"><button class="btn btn-primary" id="publish-job" type="submit">Publish & queue notification</button><button class="btn" id="reset-job" type="button">Clear form</button></div>
-    <p class="small faint">Publication is immediate. Delivery waits for configured credentials and enablement. Only genuine changes queue updates; closing a vacancy removes JobPosting markup and queues URL_DELETED. Google acceptance does not confirm indexing.</p>
+    <label class="mb-16" style="display:block"><input type="checkbox" id="job-attestation" required> I am authorized to publish this genuine vacancy and the employer/source details and links are accurate. This is not fictional, expired or promotional content.</label>
+    <div class="flex wrap"><button class="btn btn-primary" id="publish-job" type="submit">Publish & queue Google notification</button><button class="btn" id="reset-job" type="button">Clear form</button></div>
+    <p class="small faint">The page is public immediately. Google notification acceptance is tracked separately from Search Console crawl/index evidence.</p>
   </form>
 </div>
-<div class="card"><div class="card-head"><h3>Published real vacancies</h3><button class="btn btn-sm" id="refresh-jobs">Refresh</button></div><div class="table-wrap"><table class="data"><thead><tr><th>Vacancy</th><th>Availability</th><th>Google notification</th><th>Index status</th><th>Actions</th></tr></thead><tbody id="real-job-rows"></tbody></table></div><p class="small faint" id="real-job-note" style="padding:16px" role="status"></p></div>
+
+<div class="card">
+  <div class="card-head">
+    <div><h3>Published real vacancies</h3><div class="sub">public URL + employer source + notification + crawl + index evidence</div></div>
+    <button class="btn btn-sm" id="refresh-jobs">Refresh</button>
+  </div>
+  <div class="table-wrap">
+    <table class="data"><thead><tr><th>Vacancy</th><th>Public page</th><th>Source</th><th>Google request</th><th>Queue</th><th>GSC crawl</th><th>GSC index</th><th>Actions</th></tr></thead><tbody id="real-job-rows"></tbody></table>
+  </div>
+  <p class="small faint" id="real-job-note" style="padding:16px" role="status"></p>
+</div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/real-jobs.js?v=1"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/real-jobs.js?v=2"></script>{% endblock %}

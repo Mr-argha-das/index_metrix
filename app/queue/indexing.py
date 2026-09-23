@@ -65,7 +65,7 @@ async def reconcile(manager):
                 and j.get("status") == "FAILED"
                 and (json_loads(j.get("payload"), {}) or {}).get("page_id") == page["id"]
             )
-            for old_job in failed:
+            for old_job in failed[-1:]:
                 old_result = json_loads(page.get("indexing_result"), {}) or {}
                 http_status = old_result.get("httpStatus")
                 if old_result.get("retryable") is True or http_status in (408, 429) or (isinstance(http_status, int) and http_status >= 500) or not old_result:

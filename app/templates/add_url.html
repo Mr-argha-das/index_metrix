@@ -90,7 +90,7 @@
       fd.append("authorized_bulk", auth.checked ? "true" : "false");
       const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
       const headers = csrf ? {"X-CSRF-Token": csrf} : {};
-      const token = window.App?.sessionToken?.();
+      const token = typeof App !== "undefined" ? App.sessionToken() : "";
       if (token) headers.Authorization = "Bearer " + token;
 
       const response = await fetch("/api/real-jobs/links", {

@@ -1,124 +1,116 @@
 {% extends "base.html" %}
-{% set title = "Add URLs" %}
-{% set subtitle = "Validate source URLs and publish clearly labelled fictional job demos" %}
+{% set title = "Add URL" %}
+{% set subtitle = "Publish vacancies and queue Google indexing automatically" %}
 {% set nav = "submit" %}
 {% block content %}
-<p class="evidence-card mb-16">Use <strong>Add URLs</strong> for source resources. For genuine vacancies, admins can publish your own public <strong>/jobs/&lt;number&gt;</strong> pages from a vacancy sheet below; each published job page gets its own Google notification and evidence-based indexing status.</p>
-<div class="card mb-16"><div class="card-body"><strong>New publication format: /jobs/&lt;number&gt;</strong>
-<p>After a source passes validation, the app generates and saves a <strong>fictional job demo</strong> with a normal link to that source. Demo details are not extracted job facts, and applications are disabled. Existing published reference pages remain unchanged.</p></div></div>
-{% if user and user.role == "ADMIN" %}
 <div class="card mb-16">
   <div class="card-head">
     <div>
-      <h3>Publish genuine job vacancies from sheet</h3>
-      <div class="sub">Creates your own public /jobs/&lt;number&gt; pages. Employer/source links remain visible and crawlable from your page.</div>
+      <h3>Publish vacancy sheet</h3>
+      <div class="sub">Upload a CSV/XLSX sheet. Each row becomes your own public /jobs/&lt;number&gt; page.</div>
     </div>
-    <a class="btn btn-sm" href="/real-jobs">Open full job manager</a>
   </div>
   <div class="card-body">
     <div class="evidence-card mb-16">
-      <strong>Sheet columns</strong>
+      <strong>Required / supported columns</strong>
       <div class="small mt-8">title, company, company_url, job_details, apply_url, description, qualifications, employment_type, city, region, country, date_posted, valid_through</div>
-      <div class="small faint mt-8"><strong>job_details</strong> can be an employer PDF, job page, form, application page, blog/resource URL, or another public source URL. It is placed in a normal followable HTML <span class="mono">&lt;a href&gt;</span> on your public job page.</div>
+      <div class="small faint mt-8">
+        <strong>job_details</strong> may be an employer PDF, employer job page, application form, blog/resource URL, or another public source.
+        It is rendered as a normal followable link on your internal job page.
+      </div>
     </div>
+
     <div class="form-row">
       <div class="field">
         <label>CSV / XLSX vacancy sheet</label>
         <input class="input" id="job-sheet-file" type="file" accept=".csv,.xlsx">
       </div>
       <div class="field" style="justify-content:flex-end">
-        <label class="small"><input type="checkbox" id="job-sheet-attestation"> I confirm every vacancy is genuine and authorized for publication.</label>
-        <button class="btn btn-primary" id="job-sheet-import" type="button">Publish vacancies & queue Google</button>
+        <label class="small">
+          <input type="checkbox" id="job-sheet-attestation">
+          I confirm every vacancy is genuine and authorized for publication.
+        </label>
+        <button class="btn btn-primary" id="job-sheet-import" type="button">Publish vacancies</button>
       </div>
     </div>
+
     <div id="job-sheet-result" class="mt-8"></div>
-    <div class="small faint mt-8">Transient Google/network/inspection failures are retried automatically with backoff. Google accepting a notification is not the same as indexing; the dashboard only reports indexed when Search Console provides evidence.</div>
+
+    <div class="small faint mt-16">
+      Flow: sheet → public /jobs page → Google notification → automatic retry on transient failures → Search Console evidence.
+      Google notification acceptance is not the same as indexing.
+    </div>
   </div>
 </div>
-{% endif %}
+
 <div class="dash-grid">
   <div class="col">
     <div class="card">
-      <div class="card-head">
-        <div><h3>Paste PDF or normal webpage URLs</h3><div class="sub">Homepages, blogs, articles and PDFs — one URL per line, or comma separated</div></div>
-      </div>
-      <div class="card-body">
-        <div class="field">
-          <textarea class="input mono" id="submit-text" rows="10" placeholder="https://example.com/&#10;https://example.com/blog/article&#10;https://example.com/document.pdf"></textarea>
-          <span class="hint">A .pdf extension is not required. Only <span class="mono">http://</span> and <span class="mono">https://</span> are accepted. Private, loopback and internal addresses are rejected by the SSRF guard.</span>
+      <div class="card-head"><div><h3>Publication flow</h3></div></div>
+      <div class="card-body small" style="color:var(--muted)">
+        <div class="timeline">
+          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">1 · SHEET</div><div class="tl-msg">Read each vacancy row and validate the required fields.</div></div>
+          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">2 · PUBLIC PAGE</div><div class="tl-msg">Create a server-rendered /jobs/&lt;number&gt; page with JobPosting data and the employer/source link.</div></div>
+          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">3 · GOOGLE</div><div class="tl-msg">Queue a Google Indexing API notification for the internal public job URL.</div></div>
+          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">4 · AUTO RETRY</div><div class="tl-msg">Transient network, quota and Google 429/5xx failures retry automatically with persistent backoff.</div></div>
+          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">5 · EVIDENCE</div><div class="tl-msg">Search Console crawl/index evidence is tracked separately from notification acceptance.</div></div>
         </div>
-        <div class="form-row">
-          <div class="field">
-            <label>or upload a .txt / .csv with URLs</label>
-            <input class="input" id="submit-file" type="file" accept=".txt,.csv">
-          </div>
-          <div class="field" style="justify-content:flex-end">
-            <button class="btn btn-primary" id="submit-btn" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>
-              Submit URLs
-            </button>
-          </div>
-        </div>
-        <div id="submit-results" class="mt-8"></div>
       </div>
     </div>
   </div>
 
   <div class="col">
     <div class="card">
-      <div class="card-head"><div><h3>What happens next</h3></div></div>
-      <div class="card-body small" style="color:var(--muted)">
-        <div class="timeline">
-          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">RECEIVED</div><div class="tl-msg">URL recorded and queued (dedupe by normalized-URL hash).</div></div>
-          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">VALIDATED</div><div class="tl-msg">Scheme, host, DNS and private-IP checks (SSRF protection, every redirect).</div></div>
-          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">CONTENT CHECKED</div><div class="tl-msg">Detect PDF or HTML from the response. Only PDF documents require the <span class="mono">%PDF-</span> signature.</div></div>
-          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">ANALYZED</div><div class="tl-msg">PDF: structure, metadata and text. Webpage: title or heading, description, canonical and useful text; scripts are not executed.</div></div>
-          <div class="tl-item success"><span class="tl-dot"></span><div class="tl-type">PAGE PUBLISHED</div><div class="tl-msg">A clearly labelled fictional demo at /jobs/&lt;number&gt;, with actual source metadata and an ordinary source link. No real vacancy is asserted.</div></div>
-          <div class="tl-item info"><span class="tl-dot"></span><div class="tl-type">DISCOVERY PENDING</div><div class="tl-msg">Page added to sitemap.xml + rss.xml; search engines may discover it — not guaranteed.</div></div>
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-head"><div><h3>URL format example</h3></div></div>
+      <div class="card-head"><div><h3>Example columns</h3></div></div>
       <div class="card-body">
-        <div class="code-block">https://your-public-site.example/
-https://your-public-site.example/about
-https://your-public-site.example/blog/post
-https://your-public-site.example/documents/source.pdf</div>
-        <p class="small faint mt-8">This is a placeholder, not a working test URL. Replace it with a reachable public PDF or HTML webpage. Login walls, robots/noindex restrictions, JavaScript-only shells and pages without useful text cannot be published. Browser access does not guarantee server access; failed rows show the actual failure reason.</p>
+        <div class="code-block">title,company,company_url,job_details,apply_url,description,qualifications,employment_type,city,region,country,date_posted,valid_through</div>
+        <p class="small faint mt-8">One vacancy per row. Duplicate vacancies are skipped and row-level errors are reported after import.</p>
       </div>
     </div>
   </div>
 </div>
 {% endblock %}
+
 {% block scripts %}
 {% if user and user.role == "ADMIN" %}
 <script>
 (function () {
   const btn = document.getElementById("job-sheet-import");
-  if (!btn) return;
   const out = document.getElementById("job-sheet-result");
+  if (!btn || !out) return;
+
   btn.addEventListener("click", async () => {
     const file = document.getElementById("job-sheet-file").files[0];
     const confirmed = document.getElementById("job-sheet-attestation").checked;
+
     if (!file) return App.toast("Select a vacancy sheet", "Choose CSV or XLSX.", "error");
     if (!confirmed) return App.toast("Authorization required", "Confirm that every vacancy is genuine and authorized.", "error");
+
     btn.disabled = true;
     out.innerHTML = '<span class="small faint">Publishing vacancies and queueing Google notifications…</span>';
+
     try {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("authorized_bulk", "true");
+
       const result = await App.api("/api/real-jobs/import", {method: "POST", body: fd});
+      const created = result.created || [];
+      const duplicates = result.duplicates || [];
+      const errors = result.errors || [];
+
       out.innerHTML =
-        '<div class="pill green mb-8"><span class="dot"></span>' + result.created.length + ' published</div>' +
-        '<div class="pill slate mb-8"><span class="dot"></span>' + result.duplicates.length + ' duplicates</div>' +
-        '<div class="pill ' + (result.errors.length ? 'red' : 'green') + ' mb-8"><span class="dot"></span>' + result.errors.length + ' errors</div>' +
-        (result.errors.length ? '<ul class="small" style="color:var(--muted);margin:8px 0 0 18px">' + result.errors.map(e => '<li>Row ' + App.esc(e.row ?? "—") + ': ' + App.esc(e.error) + '</li>').join("") + '</ul>' : '') +
-        '<div class="small mt-8"><a href="/real-jobs">View all job pages and indexing status →</a></div>';
+        '<div class="pill green mb-8"><span class="dot"></span>' + created.length + ' published</div>' +
+        '<div class="pill slate mb-8"><span class="dot"></span>' + duplicates.length + ' duplicates</div>' +
+        '<div class="pill ' + (errors.length ? 'red' : 'green') + ' mb-8"><span class="dot"></span>' + errors.length + ' errors</div>' +
+        (errors.length ? '<ul class="small" style="color:var(--muted);margin:8px 0 0 18px">' +
+          errors.map(e => '<li>Row ' + App.esc(e.row ?? "—") + ': ' + App.esc(e.error) + '</li>').join("") +
+        '</ul>' : '') +
+        '<div class="small mt-8"><a href="/dashboard">Open dashboard →</a></div>';
+
       document.getElementById("job-sheet-file").value = "";
       document.getElementById("job-sheet-attestation").checked = false;
-      App.toast("Vacancies published", result.created.length + " public job pages queued for Google.", result.errors.length ? "warn" : "success");
+      App.toast("Publication complete", created.length + " public job pages queued.", errors.length ? "warn" : "success");
     } catch (e) {
       out.innerHTML = '<div class="login-error" style="display:block">' + App.esc(e.message) + '</div>';
       App.toast("Import failed", e.message, "error");
@@ -129,51 +121,4 @@ https://your-public-site.example/documents/source.pdf</div>
 })();
 </script>
 {% endif %}
-<script>
-(function () {
-  const btn = document.getElementById("submit-btn");
-  const out = document.getElementById("submit-results");
-  async function submit() {
-    const file = document.getElementById("submit-file").files[0];
-    const text = document.getElementById("submit-text").value;
-    btn.disabled = true;
-    out.innerHTML = '<span class="small faint">Submitting…</span>';
-    try {
-      let result;
-      if (file) {
-        const fd = new FormData();
-        fd.append("file", file);
-        result = await App.api("/api/pdfs/file", { method: "POST", body: fd });
-      } else if (text.trim()) {
-        const urls = text.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean);
-        result = await App.api("/api/pdfs/bulk", { method: "POST", body: { urls } });
-      } else {
-        out.innerHTML = '<div class="login-error" style="display:block">Paste at least one URL or choose a file.</div>';
-        btn.disabled = false;
-        return;
-      }
-      const parts = [];
-      parts.push(`<div class="pill green mb-8"><span class="dot"></span>${result.accepted.length} accepted</div>`);
-      if (result.duplicates.length) parts.push(`<div class="pill slate mb-8"><span class="dot"></span>${result.duplicates.length} duplicate(s) skipped</div>`);
-      if (result.invalid.length) {
-        parts.push(`<div class="pill red mb-8"><span class="dot"></span>${result.invalid.length} invalid</div>`);
-        parts.push('<ul class="small" style="color:var(--muted);margin:8px 0 0 18px">' + result.invalid.map(i => `<li><span class="mono">${App.esc(i.url)}</span> — ${App.esc(i.reason)}</li>`).join("") + "</ul>");
-      }
-      if (result.accepted.length) {
-        parts.push('<div class="small mt-8"><a href="/urls">View them on the URLs page →</a></div>');
-      }
-      out.innerHTML = parts.join("");
-      App.toast("Submission complete", `${result.accepted.length} accepted, ${result.duplicates.length} duplicates, ${result.invalid.length} invalid`, result.invalid.length ? "warn" : "success");
-      document.getElementById("submit-text").value = "";
-      document.getElementById("submit-file").value = "";
-    } catch (e) {
-      out.innerHTML = `<div class="login-error" style="display:block">${App.esc(e.message)}</div>`;
-      App.toast("Submission failed", e.message, "error");
-    } finally {
-      btn.disabled = false;
-    }
-  }
-  btn.addEventListener("click", submit);
-})();
-</script>
 {% endblock %}

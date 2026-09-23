@@ -219,6 +219,33 @@
     }
   }
 
+  async function renderRealJobDashboard() {
+    const host = document.getElementById("real-job-dashboard-rows");
+    if (!host) return;
+    try {
+      const data = await api("/api/real-jobs/dashboard");
+      const counts = data.counts || {};
+      for (const [id, key] of [
+        ["dash-rj-total", "total"], ["dash-rj-sent", "sent"],
+        ["dash-rj-indexed", "indexed"], ["dash-rj-unknown", "unknown"]
+      ]) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = counts[key] ?? 0;
+      }
+      host.innerHTML = (data.items || []).slice(0, 8).map(p => {
+        const g = p.gsc || {};
+        return `<tr>
+          <td><a href="${esc(p.path)}" target="_blank" rel="noopener">${esc(p.job.title || "Untitled")}</a><div class="small faint">${esc(p.job.company || "")} · #${esc(p.number)}</div></td>
+          <td>${pill(p.notificationStatus)}</td>
+          <td>${pill(g.crawlStatus || "UNKNOWN")}</td>
+          <td>${pill(g.indexStatus || "UNKNOWN")}</td>
+        </tr>`;
+      }).join("") || '<tr><td colspan="4" class="small faint">No real vacancies yet.</td></tr>';
+    } catch (e) {
+      host.innerHTML = `<tr><td colspan="4" class="small recent-failure">${esc(e.message)}</td></tr>`;
+    }
+  }
+
   async function refresh() {
     try {
       const data = await api("/api/dashboard/stats");
@@ -242,6 +269,7 @@
       renderTable(data.recent_pdfs);
       renderEvents(data.recent_events);
       renderQueue(data.queue);
+      await renderRealJobDashboard();
       intervalMs = data.polling_interval_ms || intervalMs;
       const live = document.getElementById("live-dot");
       if (live) live.style.background = "var(--green)";

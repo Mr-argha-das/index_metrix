@@ -222,8 +222,8 @@ async def create_job(request: Request, payload: dict, user=Depends(require_admin
 @router.post("/api/real-jobs/import")
 async def import_jobs(request: Request, file: UploadFile = File(...), user=Depends(require_admin)):
     filename = (file.filename or "").lower()
-    if not filename.endswith((".csv", ".xlsx", ".xls")):
-        raise HTTPException(400, "Upload a CSV or Excel sheet (.csv, .xlsx, .xls).")
+    if not filename.endswith((".csv", ".xlsx")):
+        raise HTTPException(400, "Upload a CSV or Excel sheet (.csv or .xlsx).")
     raw = await file.read()
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(413, "Sheet is larger than 10 MB.")
@@ -232,9 +232,9 @@ async def import_jobs(request: Request, file: UploadFile = File(...), user=Depen
         if filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(raw), dtype=str, keep_default_na=False)
         else:
-            df = pd.read_excel(io.BytesIO(raw), dtype=str)
+            df = pd.read_excel(io.BytesIO(raw), dtype=str, engine="openpyxl")
     except Exception:
-        raise HTTPException(400, "Could not read the sheet. Upload a valid CSV/XLS/XLSX file.") from None
+        raise HTTPException(400, "Could not read the sheet. Upload a valid CSV or XLSX file.") from None
 
     if df.empty:
         raise HTTPException(400, "The sheet contains no vacancy rows.")

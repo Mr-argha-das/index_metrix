@@ -122,12 +122,15 @@ async def _create_real_job(manager, data: dict, user: dict):
     return await projection(page, manager.settings, manager.repos), False
 
 
-async def projection(page, settings, repos):
-    jobs = await repos.jobs.find(
-        lambda j: j.get("job_type") == "GOOGLE_INDEX_NOTIFY"
-        and (json_loads(j.get("payload"), {}) or {}).get("page_id") == page["id"]
-    )
-    latest = jobs[-1] if jobs else {}
+async def projection(page, settings, repos, notification_job=None):
+    if notification_job is None:
+        jobs = await repos.jobs.find(
+            lambda j: j.get("job_type") == "GOOGLE_INDEX_NOTIFY"
+            and (json_loads(j.get("payload"), {}) or {}).get("page_id") == page["id"]
+        )
+        latest = jobs[-1] if jobs else {}
+    else:
+        latest = notification_job
     gsc_evidence = json_loads(page.get("gsc_inspection"), {}) or {}
     result = json_loads(page.get("indexing_result"), {}) or {}
     job = job_data(page)
@@ -178,14 +181,30 @@ async def admin_page(request: Request, user=Depends(require_admin_page)):
 
 @router.get("/api/real-jobs")
 async def list_jobs(request: Request, user=Depends(require_admin)):
-    rows = await request.app.state.repos.pages.find(lambda p: p.get("page_kind") == "real-job")
-    return {"items": [await projection(p, request.app.state.settings, request.app.state.repos) for p in reversed(rows)]}
+    repos = request.app.state.repos
+    rows = await repos.pages.find(lambda p: p.get("page_kind") == "real-job")
+    notify = {}
+    for job in await repos.jobs.all():
+        if job.get("job_type") != "GOOGLE_INDEX_NOTIFY":
+            continue
+        page_id = (json_loads(job.get("payload"), {}) or {}).get("page_id")
+        if page_id:
+            notify[page_id] = job
+    return {"items": [await projection(p, request.app.state.settings, repos, notify.get(p["id"])) for p in reversed(rows)]}
 
 
 @router.get("/api/real-jobs/dashboard")
 async def dashboard_real_jobs(request: Request, user=Depends(require_admin)):
-    rows = await request.app.state.repos.pages.find(lambda p: p.get("page_kind") == "real-job")
-    items = [await projection(p, request.app.state.settings, request.app.state.repos) for p in reversed(rows)]
+    repos = request.app.state.repos
+    rows = await repos.pages.find(lambda p: p.get("page_kind") == "real-job")
+    notify = {}
+    for job in await repos.jobs.all():
+        if job.get("job_type") != "GOOGLE_INDEX_NOTIFY":
+            continue
+        page_id = (json_loads(job.get("payload"), {}) or {}).get("page_id")
+        if page_id:
+            notify[page_id] = job
+    items = [await projection(p, request.app.state.settings, repos, notify.get(p["id"])) for p in reversed(rows)]
     counts = {
         "total": len(items),
         "open": sum(1 for p in items if p["status"] == "OPEN"),

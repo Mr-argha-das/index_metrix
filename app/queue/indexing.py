@@ -107,8 +107,9 @@ async def process_notification(manager, job_id):
         attempted = job.get("attempts") or 0
         result = {"googleRequestMade": False, "url": payload["url"], "type": payload["type"], "checkedAt": utcnow_iso()}
         try:
-            if attempted >= job["max_attempts"]:
-                raise IndexingError("Attempt limit reached; check the last result and retry manually if appropriate.")
+            # Real-job indexing is intentionally not bounded by max_attempts.
+            # Transient Google/network/quota failures remain in RETRY_WAITING
+            # and are retried automatically with bounded exponential backoff.
             if not page.get("reviewed_by") or job_data(page).get("authorized_real_vacancy") is not True:
                 raise IndexingError("Vacancy has not been attested by an authorized operator.")
             if not credential_path(manager.settings).exists():
@@ -132,8 +133,16 @@ async def process_notification(manager, job_id):
             else:
                 message, retryable, status, delay, sent = "Indexing setup or network failure. Check configuration and retry.", isinstance(exc, httpx.HTTPError), None, 0, False
             result.update(message=message, httpStatus=status, googleRequestMade=sent)
-            if retryable and attempted < job["max_attempts"]:
-                await defer(manager, job, page, "RETRY_WAITING", max(delay, backoff_seconds(max(1, attempted))), result, attempted)
+            if retryable:
+                await defer(
+                    manager,
+                    job,
+                    page,
+                    "RETRY_WAITING",
+                    max(delay, backoff_seconds(max(1, attempted))),
+                    result,
+                    attempted,
+                )
             else:
                 await repos.pages.update(page["id"], touch=False, indexing_status="FAILED", indexing_result=json_dumps(result))
                 await repos.jobs.update(job_id, status="FAILED", attempts=attempted, error=message, completed_at=utcnow_iso())

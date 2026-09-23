@@ -174,25 +174,6 @@ async def require_real_page(request, page_id):
     return page
 
 
-@router.get("/real-jobs", include_in_schema=False)
-async def admin_page(request: Request, user=Depends(require_admin_page)):
-    return templates.render(request, "real_jobs.html", {})
-
-
-@router.get("/api/real-jobs")
-async def list_jobs(request: Request, user=Depends(require_admin)):
-    repos = request.app.state.repos
-    rows = await repos.pages.find(lambda p: p.get("page_kind") == "real-job")
-    notify = {}
-    for job in await repos.jobs.all():
-        if job.get("job_type") != "GOOGLE_INDEX_NOTIFY":
-            continue
-        page_id = (json_loads(job.get("payload"), {}) or {}).get("page_id")
-        if page_id:
-            notify[page_id] = job
-    return {"items": [await projection(p, request.app.state.settings, repos, notify.get(p["id"])) for p in reversed(rows)]}
-
-
 @router.get("/api/real-jobs/dashboard")
 async def dashboard_real_jobs(request: Request, user=Depends(require_admin)):
     repos = request.app.state.repos

@@ -37,7 +37,6 @@ from .auth.service import AuthService, bootstrap_admin_if_needed
 from .config import get_settings, validate_production
 from .database.feather_store import Database
 from .database.repositories import RUNTIME_SETTING_KEYS, Repos, effective_setting
-from .integrations.bing_webmaster import BingConfigError, BingWebmaster
 from .integrations.google_search_console import GSCConfigError, GoogleSearchConsole
 from .logging_setup import RingLogHandler, setup_logging
 from .pdf.fetcher import HostRateLimiter, SafeFetcher
@@ -98,11 +97,6 @@ async def lifespan(app: FastAPI):
             )
         except GSCConfigError as exc:
             log.warning("Google Search Console not initialised: %s", exc)
-    if settings.bing_webmaster_enabled or settings.bing_api_key:
-        try:
-            queue.bing = BingWebmaster(settings.bing_api_key, settings.public_base_url)
-        except BingConfigError as exc:
-            log.warning("Bing Webmaster not initialised: %s", exc)
     app.state.queue = queue
 
     # -- bootstrap + housekeeping --------------------------------------------

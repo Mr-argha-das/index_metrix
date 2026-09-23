@@ -6,7 +6,7 @@ import math
 import re
 
 import pandas as pd
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from .. import templates
 from ..auth.routes import require_admin, require_admin_page
@@ -220,7 +220,9 @@ async def create_job(request: Request, payload: dict, user=Depends(require_admin
 
 
 @router.post("/api/real-jobs/import")
-async def import_jobs(request: Request, file: UploadFile = File(...), user=Depends(require_admin)):
+async def import_jobs(request: Request, file: UploadFile = File(...), authorized_bulk: bool = Form(False), user=Depends(require_admin)):
+    if not authorized_bulk:
+        raise HTTPException(400, "Confirm that every vacancy in this sheet is genuine and that you are authorized to publish it.")
     filename = (file.filename or "").lower()
     if not filename.endswith((".csv", ".xlsx")):
         raise HTTPException(400, "Upload a CSV or Excel sheet (.csv or .xlsx).")

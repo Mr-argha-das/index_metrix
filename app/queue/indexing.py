@@ -119,6 +119,20 @@ async def reconcile(manager):
 
             await ensure_notification(manager, page)
 
+            # Crash-safe recovery for the evidence polling loop. If the server
+            # stopped after persisting an inspection but before scheduling the
+            # next poll, recreate exactly one future inspection.
+            if page.get("indexing_status") == "ACCEPTED" and (page.get("gsc_index_status") or "UNKNOWN") != "INDEXED":
+                active_gsc = await manager.repos.jobs.find(
+                    lambda j: j.get("job_type") == JOB_GSC_INSPECT
+                    and j.get("status") in GSC_JOB_ACTIVE
+                    and (json_loads(j.get("payload"), {}) or {}).get("page_id") == page["id"]
+                )
+                if not active_gsc:
+                    evidence = json_loads(page.get("gsc_inspection"), {}) or {}
+                    sequence = int(evidence.get("poll_sequence") or 0) + 1 if evidence else 0
+                    await schedule_gsc_inspection(manager, page["id"], sequence=sequence)
+
 
 async def wake_waiting(manager):
     # Caller holds indexing_lock, so credential replacement cannot race a send.

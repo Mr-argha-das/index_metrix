@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from urllib.parse import urlsplit
 
 import pandas as pd
+from faker import Faker
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from .. import templates
@@ -49,46 +50,83 @@ ALIASES = {
 
 
 
+fake = Faker()
+
 GENERATED_TITLES = [
     "Python Developer", "Senior Python Developer", "Python Backend Developer",
-    "Python Full Stack Developer", "Junior Python Developer", "Python Software Engineer",
-    "FastAPI Developer", "Django Developer", "Backend Engineer (Python)",
-    "Python Automation Engineer", "Python Cloud Engineer", "API Integration Engineer",
+    "Python Full Stack Developer", "Junior Python Developer", "Lead Python Developer",
+    "Python Software Engineer", "Python API Developer", "Python Data Engineer",
+    "FastAPI Developer", "Django Developer", "Flask Developer",
+    "Backend Engineer (Python)", "Python Microservices Developer",
+    "Senior Backend Engineer", "Python Automation Engineer",
+    "Python DevOps Engineer", "Machine Learning Engineer (Python)",
+    "Data Scientist (Python)", "Python Cloud Engineer",
+    "Senior Software Engineer - Python", "Python Web Developer",
+    "API Integration Engineer", "Python ETL Developer",
+    "Python Security Engineer", "Python Performance Engineer",
 ]
 GENERATED_SKILLS = [
-    "Python", "FastAPI", "Django", "SQL", "PostgreSQL", "MySQL", "MongoDB",
-    "Redis", "Docker", "AWS", "REST APIs", "Git", "Linux", "Microservices",
-    "Unit Testing", "Pytest", "Pydantic", "AsyncIO", "JWT",
+    "Python", "FastAPI", "Django", "Flask", "SQL", "PostgreSQL", "MySQL",
+    "MongoDB", "Redis", "Docker", "Kubernetes", "AWS", "Azure", "GCP",
+    "REST APIs", "GraphQL", "Celery", "RabbitMQ", "Kafka", "Pandas",
+    "NumPy", "Scikit-learn", "TensorFlow", "PyTorch", "CI/CD", "Git",
+    "Linux", "Microservices", "Unit Testing", "Pytest", "SQLAlchemy",
+    "Pydantic", "AsyncIO", "WebSockets", "OAuth", "JWT"
 ]
+GENERATED_EMPLOYMENT_TYPES = ["FULL_TIME", "FULL_TIME", "FULL_TIME", "CONTRACT", "PART_TIME", "INTERNSHIP"]
 GENERATED_LOCATIONS = [
     ("Jaipur", "Rajasthan"), ("Bengaluru", "Karnataka"), ("Hyderabad", "Telangana"),
     ("Pune", "Maharashtra"), ("Mumbai", "Maharashtra"), ("Chennai", "Tamil Nadu"),
     ("Noida", "Uttar Pradesh"), ("Gurgaon", "Haryana"), ("Ahmedabad", "Gujarat"),
-    ("Kolkata", "West Bengal"), ("Indore", "Madhya Pradesh"), ("Kochi", "Kerala"),
+    ("Kolkata", "West Bengal"), ("Indore", "Madhya Pradesh"), ("Chandigarh", "Chandigarh"),
+    ("Coimbatore", "Tamil Nadu"), ("Kochi", "Kerala"), ("Lucknow", "Uttar Pradesh"),
+    ("Nagpur", "Maharashtra"), ("Bhopal", "Madhya Pradesh"), ("Vadodara", "Gujarat"),
+    ("Surat", "Gujarat"), ("Visakhapatnam", "Andhra Pradesh"),
 ]
-EMPLOYMENT_TYPES = ["FULL_TIME", "FULL_TIME", "FULL_TIME", "CONTRACT", "PART_TIME", "INTERNSHIP"]
 
 
-def _generated_company(source_url: str) -> str:
-    host = urlsplit(source_url).netloc.lower().removeprefix("www.")
-    base = host.split(":")[0].split(".")[0] if host else "Employer"
-    return re.sub(r"[-_]+", " ", base).strip().title() or "Employer"
+def _random_company_name():
+    base = fake.company().replace(",", "").replace("Inc", "").replace("LLC", "").strip()
+    if random.random() < 0.6:
+        base = fake.last_name() + " " + random.choice([
+            "Technologies", "Solutions", "Systems", "Labs", "Soft", "Digital",
+            "Innovations", "Tech", "Infosystems", "Software", "IT Services",
+            "Consulting", "Pvt Ltd", "Limited", "Global",
+        ])
+    return base
+
+
+def _random_company_url(company):
+    slug = company.lower().replace(" ", "").replace(".", "").replace("&", "and")[:20]
+    return f"https://www.{slug}{random.choice(['.com', '.in', '.co.in', '.tech', '.io'])}"
+
+
+def _random_description(title, company):
+    return random.choice([
+        f"We are looking for a talented {title} to join {company}. You will work on scalable backend systems and APIs.",
+        f"{company} is hiring a {title}. Responsibilities include designing, developing and maintaining high-performance applications.",
+        f"Exciting opportunity for a {title} at {company}. Work with modern Python stack and cloud technologies.",
+        f"Join {company} as a {title}. Build robust microservices, APIs and data pipelines using Python.",
+        f"{company} seeks a skilled {title} to contribute to our product development and engineering excellence.",
+    ])
 
 
 def _generated_job(source_url: str) -> dict:
-    company = _generated_company(source_url)
     title = random.choice(GENERATED_TITLES)
+    if random.random() < 0.25:
+        title += " - " + random.choice(["Remote", "Hybrid", "Onsite", "Immediate Joiner"])
+    company = _random_company_name()
     city, region = random.choice(GENERATED_LOCATIONS)
     posted = date.today()
     return {
         "title": title,
         "company": company,
-        "company_url": source_url,
+        "company_url": _random_company_url(company),
         "job_details": source_url,
         "apply_url": source_url,
-        "description": f"{company} is hiring for a {title}. Review the employer-provided job details and application link for the authoritative vacancy information.",
-        "qualifications": ", ".join(random.sample(GENERATED_SKILLS, k=random.randint(4, 7))),
-        "employment_type": random.choice(EMPLOYMENT_TYPES),
+        "description": _random_description(title, company),
+        "qualifications": ", ".join(random.sample(GENERATED_SKILLS, k=random.randint(4, 8))),
+        "employment_type": random.choice(GENERATED_EMPLOYMENT_TYPES),
         "city": city,
         "region": region,
         "country": "IN",

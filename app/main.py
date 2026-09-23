@@ -351,22 +351,12 @@ app.add_exception_handler(Exception, server_error_handler)
 # Routers
 # ---------------------------------------------------------------------------
 
-from .integrations.routes import (  # noqa: E402
-    page as integrations_page,
-    router as integrations_router,
-)
-from .monitoring.routes import (  # noqa: E402
-    page as monitoring_page,
-    router as monitoring_router,
-)
-from .pdf.routes import pages as pdf_pages, router as pdf_router  # noqa: E402
 from .publishing.routes import (  # noqa: E402
     preview_pages,
     router as publishing_router,
 )
 from .users.routes import page as users_page, router as users_router  # noqa: E402
 
-from .monitoring.index_api import router as index_router
 
 @app.get("/api/openapi.json", include_in_schema=False)
 async def private_openapi(user: dict = Depends(require_admin)):
@@ -383,113 +373,12 @@ from .publishing.real_job_routes import router as real_job_router
 from .integrations.indexing_routes import router as indexing_router
 app.include_router(real_job_router)
 app.include_router(indexing_router)
-app.include_router(index_router)
 app.include_router(auth_router)
 app.include_router(auth_pages)
 app.include_router(users_router)
 app.include_router(users_page)
-app.include_router(pdf_router)
-app.include_router(pdf_pages)
 app.include_router(publishing_router)
 app.include_router(preview_pages)
-app.include_router(monitoring_router)
-app.include_router(monitoring_page)
-app.include_router(integrations_router)
-app.include_router(integrations_page)
-
-
-# ---------------------------------------------------------------------------
-# Dashboard
-# ---------------------------------------------------------------------------
-
-VALID_CLASSIFICATIONS = ("TEXT_PDF", "SCANNED_OR_EMPTY_PDF", "HTML")
-PROCESSING_STATES = ("RECEIVED", "VALIDATING", "PDF_ANALYZING", "PAGE_GENERATING")
-INVALID_STATES = ("INVALID", "PDF_INVALID", "PDF_ANALYSIS_FAILED", "FAILED")
-
-
-@app.get("/api/dashboard/stats", tags=["dashboard"])
-async def dashboard_stats(request: Request, user: dict = Depends(require_user)):
-    repos: Repos = request.app.state.repos
-    pdfs = await repos.pdfs.all(order="-id")
-    if user.get("role") != "ADMIN":
-        pdfs = [p for p in pdfs if p.get("user_id") == user.get("id")]
-        my_ids = {p["id"] for p in pdfs}
-    else:
-        my_ids = None
-
-    pages = await repos.pages.all()
-    page_pdfs = {p["pdf_id"] for p in pages if p.get("published_at")}
-    if my_ids is not None:
-        page_pdfs = page_pdfs & my_ids
-
-    def count(pred) -> int:
-        return sum(1 for p in pdfs if pred(p))
-
-    # INDEXED only counts records that carry authoritative evidence
-    indexed_with_evidence = count(
-        lambda p: p.get("index_status") == "INDEXED" and (p.get("index_evidence") or "")
-    )
-    stats = {
-        "submission_queued": count(lambda p: p.get("reference_submission_status") == "QUEUED"),
-        "submission_accepted": count(lambda p: p.get("reference_submission_status") == "ACCEPTED"),
-        "submission_failed": count(lambda p: p.get("reference_submission_status") == "FAILED"),
-        "submission_unsupported": count(lambda p: p.get("reference_submission_status") == "UNSUPPORTED"),
-        "total": len(pdfs),
-        "valid": count(lambda p: p.get("classification") in VALID_CLASSIFICATIONS),
-        "invalid": count(lambda p: p.get("status") in INVALID_STATES),
-        "processing": count(lambda p: p.get("status") in PROCESSING_STATES),
-        "published": len(page_pdfs),
-        "discovery_pending": count(
-            lambda p: p.get("discovery_status") == "DISCOVERY_PENDING"
-        ),
-        "crawl_checked": count(lambda p: p.get("crawl_status") in ("CRAWL_CHECKED", "SEARCH_ENGINE_CRAWL_EVIDENCE")),
-        "fetch_checked": count(lambda p: bool(p.get("last_checked_at") or p.get("last_probe_at"))),
-        "discovery_submitted": len(page_pdfs),
-        "discovered": count(lambda p: p.get("discovery_status") == "DISCOVERED"),
-        "not_indexed": count(lambda p: p.get("index_status") == "NOT_INDEXED"),
-        "indexed": indexed_with_evidence,
-        "unknown": count(lambda p: p.get("index_status") == "INDEX_UNKNOWN"),
-    }
-    by_status: dict[str, int] = {}
-    for p in pdfs:
-        s = p.get("status") or "UNKNOWN"
-        by_status[s] = by_status.get(s, 0) + 1
-
-    per_day: dict[str, int] = {}
-    today = utcnow().date()
-    for i in range(6, -1, -1):
-        per_day[(today - timedelta(days=i)).isoformat()] = 0
-    for p in pdfs:
-        d = (p.get("created_at") or "")[:10]
-        if d in per_day:
-            per_day[d] += 1
-
-    events = await repos.events.recent(limit=12)
-    queue_stats = await request.app.state.queue.stats()
-    recent_pdfs = [
-        {
-            k: p.get(k)
-            for k in (
-                "id", "title", "normalized_url", "source_domain", "status",
-                "discovery_status", "crawl_status", "index_status", "updated_at", "error",
-            )
-        }
-        for p in pdfs[:8]
-    ]
-    return {
-        "stats": stats,
-        "by_status": by_status,
-        "per_day": per_day,
-        "recent_events": events,
-        "queue": queue_stats,
-        "recent_pdfs": recent_pdfs,
-        "polling_interval_ms": request.app.state.settings.polling_interval_ms,
-    }
-
-
-@app.get("/dashboard", include_in_schema=False)
-async def dashboard_page(request: Request, user: dict = Depends(require_user_page)):
-    return templates.render(request, "dashboard.html", {"user": user})
 
 
 # ---------------------------------------------------------------------------
@@ -520,11 +409,6 @@ async def api_queue_cancel(job_id: int, request: Request, user: dict = Depends(r
     if not ok:
         raise HTTPException(status_code=409, detail="Job is not cancellable in its current state.")
     return {"ok": True}
-
-
-@app.get("/queue", include_in_schema=False)
-async def queue_page(request: Request, user: dict = Depends(require_user_page)):
-    return templates.render(request, "queue.html", {"user": user})
 
 
 # ---------------------------------------------------------------------------

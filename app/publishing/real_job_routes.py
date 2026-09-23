@@ -151,7 +151,7 @@ async def projection(page, settings, repos, notification_job=None):
             "id": latest.get("id"),
             "status": latest.get("status"),
             "attempts": latest.get("attempts") or 0,
-            "maxAttempts": latest.get("max_attempts") or 0,
+            "maxAttempts": None if latest.get("job_type") == "GOOGLE_INDEX_NOTIFY" else (latest.get("max_attempts") or 0),
             "error": latest.get("error"),
             "nextAttemptAt": latest.get("next_attempt_at"),
             "completedAt": latest.get("completed_at"),

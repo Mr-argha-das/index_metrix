@@ -694,6 +694,7 @@ async def run_gsc_inspect(manager: QueueManager, job: dict) -> None:
         evidence["target"] = "real-job"
         evidence["page_id"] = page["id"]
         evidence["url"] = page["page_url"]
+        evidence["poll_sequence"] = poll_sequence
 
         await repos.pages.update(
             page["id"],

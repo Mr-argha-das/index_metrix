@@ -84,7 +84,9 @@ async def process_job(manager: QueueManager, job_id: int) -> None:
         await process_notification(manager, job_id)
         return
 
-    if job.get("attempts", 0) >= job.get("max_attempts", 1):
+    # GSC inspections are polling jobs. Transient failures may be retried
+    # indefinitely; the persisted poll sequence controls the cadence.
+    if job.get("job_type") != JOB_GSC_INSPECT and job.get("attempts", 0) >= job.get("max_attempts", 1):
         await repos.jobs.update(job_id, status="FAILED", completed_at=utcnow_iso(), error="Attempt limit reached")
         return
 
@@ -639,6 +641,9 @@ async def run_gsc_inspect(manager: QueueManager, job: dict) -> None:
 
     # Real jobs are inspected directly on the public /jobs/<number> page.
     if page_id:
+        from .indexing import schedule_gsc_inspection
+        payload = json_loads(job.get("payload"), {}) or {}
+        poll_sequence = int(payload.get("poll_sequence") or 0)
         page = await repos.pages.get(int(page_id))
         if not page or page.get("page_kind") != "real-job":
             raise PipelineFinal("Real job page no longer exists.", ST_FAILED)
@@ -697,8 +702,19 @@ async def run_gsc_inspect(manager: QueueManager, job: dict) -> None:
             user_id=page.get("reviewed_by"),
             status="SUCCESS",
             evidence_type="SEARCH_CONSOLE",
-            metadata=evidence,
+            metadata={**evidence, "poll_sequence": poll_sequence},
         )
+        if status != IS_INDEXED and page.get("indexing_status") == "ACCEPTED":
+            next_sequence = poll_sequence + 1
+            await schedule_gsc_inspection(manager, page["id"], sequence=next_sequence)
+            await repos.events.add(
+                "REAL_JOB_GSC_POLL_SCHEDULED",
+                f"Next Search Console inspection scheduled automatically (poll #{next_sequence + 1}).",
+                user_id=page.get("reviewed_by"),
+                status="PENDING",
+                evidence_type="SEARCH_CONSOLE",
+                metadata={"pageId": page["id"], "poll_sequence": next_sequence},
+            )
         return
 
     # Existing reference-page inspection flow.

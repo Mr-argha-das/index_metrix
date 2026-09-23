@@ -50,89 +50,38 @@ ALIASES = {
 
 
 
-fake = Faker()
+def _source_job(source_url: str) -> dict:
+    """Create an honest source-link record without inventing employer facts.
 
-GENERATED_TITLES = [
-    "Python Developer", "Senior Python Developer", "Python Backend Developer",
-    "Python Full Stack Developer", "Junior Python Developer", "Lead Python Developer",
-    "Python Software Engineer", "Python API Developer", "Python Data Engineer",
-    "FastAPI Developer", "Django Developer", "Flask Developer",
-    "Backend Engineer (Python)", "Python Microservices Developer",
-    "Senior Backend Engineer", "Python Automation Engineer",
-    "Python DevOps Engineer", "Machine Learning Engineer (Python)",
-    "Data Scientist (Python)", "Python Cloud Engineer",
-    "Senior Software Engineer - Python", "Python Web Developer",
-    "API Integration Engineer", "Python ETL Developer",
-    "Python Security Engineer", "Python Performance Engineer",
-]
-GENERATED_SKILLS = [
-    "Python", "FastAPI", "Django", "Flask", "SQL", "PostgreSQL", "MySQL",
-    "MongoDB", "Redis", "Docker", "Kubernetes", "AWS", "Azure", "GCP",
-    "REST APIs", "GraphQL", "Celery", "RabbitMQ", "Kafka", "Pandas",
-    "NumPy", "Scikit-learn", "TensorFlow", "PyTorch", "CI/CD", "Git",
-    "Linux", "Microservices", "Unit Testing", "Pytest", "SQLAlchemy",
-    "Pydantic", "AsyncIO", "WebSockets", "OAuth", "JWT"
-]
-GENERATED_EMPLOYMENT_TYPES = ["FULL_TIME", "FULL_TIME", "FULL_TIME", "CONTRACT", "PART_TIME", "INTERNSHIP"]
-GENERATED_LOCATIONS = [
-    ("Jaipur", "Rajasthan"), ("Bengaluru", "Karnataka"), ("Hyderabad", "Telangana"),
-    ("Pune", "Maharashtra"), ("Mumbai", "Maharashtra"), ("Chennai", "Tamil Nadu"),
-    ("Noida", "Uttar Pradesh"), ("Gurgaon", "Haryana"), ("Ahmedabad", "Gujarat"),
-    ("Kolkata", "West Bengal"), ("Indore", "Madhya Pradesh"), ("Chandigarh", "Chandigarh"),
-    ("Coimbatore", "Tamil Nadu"), ("Kochi", "Kerala"), ("Lucknow", "Uttar Pradesh"),
-    ("Nagpur", "Maharashtra"), ("Bhopal", "Madhya Pradesh"), ("Vadodara", "Gujarat"),
-    ("Surat", "Gujarat"), ("Visakhapatnam", "Andhra Pradesh"),
-]
-
-
-def _random_company_name():
-    base = fake.company().replace(",", "").replace("Inc", "").replace("LLC", "").strip()
-    if random.random() < 0.6:
-        base = fake.last_name() + " " + random.choice([
-            "Technologies", "Solutions", "Systems", "Labs", "Soft", "Digital",
-            "Innovations", "Tech", "Infosystems", "Software", "IT Services",
-            "Consulting", "Pvt Ltd", "Limited", "Global",
-        ])
-    return base
-
-
-def _random_company_url(company):
-    slug = company.lower().replace(" ", "").replace(".", "").replace("&", "and")[:20]
-    return f"https://www.{slug}{random.choice(['.com', '.in', '.co.in', '.tech', '.io'])}"
-
-
-def _random_description(title, company):
-    return random.choice([
-        f"We are looking for a talented {title} to join {company}. You will work on scalable backend systems and APIs.",
-        f"{company} is hiring a {title}. Responsibilities include designing, developing and maintaining high-performance applications.",
-        f"Exciting opportunity for a {title} at {company}. Work with modern Python stack and cloud technologies.",
-        f"Join {company} as a {title}. Build robust microservices, APIs and data pipelines using Python.",
-        f"{company} seeks a skilled {title} to contribute to our product development and engineering excellence.",
-    ])
-
-
-def _generated_job(source_url: str) -> dict:
-    title = random.choice(GENERATED_TITLES)
-    if random.random() < 0.25:
-        title += " - " + random.choice(["Remote", "Hybrid", "Onsite", "Immediate Joiner"])
-    company = _random_company_name()
-    city, region = random.choice(GENERATED_LOCATIONS)
-    posted = date.today()
+    URL-only intake intentionally does not emit JobPosting structured data.
+    Rich job metadata may only be supplied through the reviewed CSV/XLSX/manual
+    vacancy flow where the operator provides the actual values.
+    """
+    parsed = urlsplit(source_url)
+    host = parsed.hostname or "external source"
+    path_part = (parsed.path or "").rstrip("/").split("/")[-1]
+    slug = re.sub(r"[-_]+", " ", path_part).strip()
+    title = slug[:140].title() if slug else "External vacancy"
+    if title.lower() in {"job", "jobs", "career", "careers", "apply", "application"}:
+        title = "External vacancy"
+    today = date.today()
     return {
         "title": title,
-        "company": company,
-        "company_url": _random_company_url(company),
+        "company": host,
+        "company_url": f"{parsed.scheme}://{parsed.netloc}",
         "job_details": source_url,
         "apply_url": source_url,
-        "description": _random_description(title, company),
-        "qualifications": ", ".join(random.sample(GENERATED_SKILLS, k=random.randint(4, 8))),
-        "employment_type": random.choice(GENERATED_EMPLOYMENT_TYPES),
-        "city": city,
-        "region": region,
-        "country": "IN",
-        "date_posted": posted.isoformat(),
-        "valid_through": (posted + timedelta(days=random.randint(25, 60))).isoformat(),
+        "description": "This page is a source-link landing page. The original vacancy/application is provided by the employer or source site. Use the original source link below for the complete vacancy details and application instructions.",
+        "qualifications": "",
+        "employment_type": "NOT_SPECIFIED",
+        "city": "",
+        "region": "",
+        "country": "",
+        "date_posted": today.isoformat(),
+        "valid_through": (today + timedelta(days=30)).isoformat(),
         "authorized_real_vacancy": True,
+        "structured_data_verified": False,
+        "source_only": True,
     }
 
 
@@ -345,7 +294,7 @@ async def import_job_links(
     async with manager.indexing_lock:
         for source_url in urls:
             try:
-                data = _generated_job(source_url)
+                data = _source_job(source_url)
                 result, duplicate = await _create_real_job(manager, data, user)
                 (duplicates if duplicate else created).append(result)
             except Exception as exc:

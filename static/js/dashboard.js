@@ -81,6 +81,9 @@
         ["Crawl status", g.crawlStatus],
         ["Index status", g.indexStatus],
         ["GSC last checked", g.lastCheckedAt],
+        ["GSC next check", g.nextCheckAt],
+        ["GSC polling", g.polling ? "AUTO" : "—"],
+        ["GSC poll sequence", g.pollSequence],
       ].filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== "")
        .map(([k, v]) => '<div class="small"><span class="faint">' + esc(k) + ':</span> ' + esc(String(v)) + '</div>')
        .join("");

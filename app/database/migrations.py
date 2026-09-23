@@ -15,7 +15,7 @@ from .feather_store import Database, DatabaseCorruptedError, TABLE_SCHEMAS
 
 log = logging.getLogger("bot_indexer.migrations")
 
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 
 
 def describe_schemas() -> dict[str, dict[str, str]]:

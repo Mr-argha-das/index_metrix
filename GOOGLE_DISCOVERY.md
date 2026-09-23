@@ -1,3 +1,5 @@
+> **2026-09-23 scoped addition:** [GOOGLE_INDEXING.md](GOOGLE_INDEXING.md) documents the separate operator-authored real-vacancy flow and its eligible Indexing API notifications. The source-reference/generated-demo restrictions below still apply to those resources. Existing demos are not converted or sent to Google. This document's earlier implementation/test counts are historical.
+
 # Google indexing capability decision and implemented fallback
 
 > Subsequent publication-format change: new submissions now use clearly labelled fictional demo pages at `/jobs/<number>`. Existing source references are retained. See [DEMO_JOBS.md](DEMO_JOBS.md). The no-generic-indexing-API decision below is unchanged; fictional jobs are not eligible job postings.

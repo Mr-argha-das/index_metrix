@@ -117,7 +117,7 @@ const App = (() => {
       const link = event.target.closest("a[href]");
       if (!link || link.target || link.hasAttribute("download") || link.id === "logout-btn") return;
       const url = new URL(link.href, location.href);
-      if (url.origin !== location.origin || !/^\/(dashboard|submit|urls|pdfs|queue|monitoring|sitemap|rss|users|settings|integrations|logs|analyzer)(\/|$)/.test(url.pathname)) return;
+      if (url.origin !== location.origin || !/^\/(dashboard|submit|urls|pdfs|queue|monitoring|sitemap|rss|users|settings|integrations|logs|analyzer|real-jobs|google-indexing)(\/|$)/.test(url.pathname)) return;
       event.preventDefault();
       gotoWithSession(url.pathname + url.search + url.hash).catch((error) => {
         toast("Navigation failed", error.message, "error");

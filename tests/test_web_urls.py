@@ -31,7 +31,7 @@ def test_normal_webpage_publishes_with_correct_type_and_source_link(client, pdf_
     anchor = page.find('a', href=url)
     assert anchor and anchor.get_text(strip=True) == 'Open Original Web Page'
     assert 'noopener' in anchor['rel']
-    assert 'Fictional demo' in page.h1.text
+    assert 'Generated content · not a live vacancy' in page.get_text()
     assert 'JobPosting' not in response.text
     assert '%PDF-' not in response.text
     assert row['referencePage'] in public.get('/sitemap.xml').text

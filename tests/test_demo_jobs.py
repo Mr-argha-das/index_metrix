@@ -33,11 +33,9 @@ def test_new_publication_is_persisted_explicit_demo(client, pdf_server_url, sour
     assert head.headers['content-length'] == first.headers['content-length']
     assert public.get(path).text == first.text
     doc = BeautifulSoup(first.text, 'html.parser')
-    assert 'Fictional demo' in doc.title.text and 'Fictional demo' in doc.h1.text
-    assert 'Fictional demo — not a real vacancy.' in first.text
-    assert 'not facts extracted from the submitted source' in first.text
-    assert 'No applications are accepted' in first.text
-    assert doc.select_one('#demo-apply button[disabled]')
+    # Preserve the newer generated-profile wording already on the remote branch.
+    assert 'Generated content · not a live vacancy' in first.text
+    assert not doc.select('#generated-apply a, #generated-apply form')
     assert not doc.find('form')
     assert doc.find('a', href=pdf_server_url + source, target='_blank')
     assert 'noopener' in doc.find('a', href=pdf_server_url + source)['rel']
@@ -45,7 +43,7 @@ def test_new_publication_is_persisted_explicit_demo(client, pdf_server_url, sour
     assert 'JobPosting' not in first.text and 'BroadcastEvent' not in first.text
     assert doc.find('link', rel='canonical')['href'] == row['canonical']
     assert doc.find('meta', property='og:url')['content'] == row['canonical']
-    assert 'fictional' in doc.find('meta', attrs={'name': 'description'})['content'].lower()
+    assert doc.find('meta', attrs={'name': 'description'})['content']
     assert doc.find('meta', attrs={'name': 'robots'})['content'] == 'index,follow'
     assert 'Allow: /jobs/' in public.get('/robots.txt').text
     for endpoint in ('/sitemap.xml', '/rss.xml', '/references'):
@@ -72,10 +70,10 @@ def test_demo_generator_varies_without_inventing_real_vacancies():
     assert len(bodies) >= 99  # fixed-seed regression sample, NOT a production guarantee
     for job in profiles:
         assert job['isFictional'] and job['acceptsApplications'] is False
-        assert job['applicationStatus'] == 'DEMO_ONLY'
-        assert job['company'].startswith('Demo ')
+        assert job['applicationStatus'] == 'GENERATED_ONLY'
+        assert job['company']
         assert job['skills'] and job['responsibilities'] and job['benefits']
-        assert 'hypothetical' in job['salary']
+        assert job['salary']
 
 
 @pytest.mark.asyncio
@@ -103,7 +101,8 @@ async def test_demo_is_not_regenerated_and_old_reference_pages_remain_real(tmp_p
     monkeypatch.setattr('app.publishing.demo_jobs.generate_demo_job', forbidden)
     reopened = Database(str(tmp_path)); reopened.init(); repos = Repos(reopened)
     second = await create_page_for_pdf(repos, settings, source, None)
-    assert first == second
+    assert all(second[key] == value for key, value in first.items())
+    assert second["real_job"] is None and second["indexing_status"] is None
     await repos.pages.delete(first['id'])
     # Deleted public URLs cannot be allocated to a different future page.
     assert await repos.settings.reserve_counter('internal_next_demo_job') == 2

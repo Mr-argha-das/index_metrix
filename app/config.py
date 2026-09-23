@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     google_search_console_enabled: bool = False
     # Path to a service-account JSON file, or the inline JSON document itself.
     google_service_account_json: str = ""
+    # Conservative local rolling limits; do not exceed approved Google quota.
+    google_indexing_daily_limit: int = Field(default=200, ge=1, le=200)
+    google_indexing_minute_limit: int = Field(default=10, ge=1, le=60)
     bing_webmaster_enabled: bool = False
     bing_api_key: str = ""
     # Search-visibility observation (non-authoritative) — off by default.

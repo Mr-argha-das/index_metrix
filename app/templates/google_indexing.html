@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% set title = "Google Indexing API" %}
+{% set subtitle = "Admin-only setup · real vacancies only" %}
+{% set nav = "google-indexing" %}
+{% block content %}
+<div class="grid-2">
+  <div class="card"><div class="card-head"><h3>Service-account JSON</h3></div><div class="card-body">
+    <p>Upload the JSON key downloaded from Google Cloud. It is kept in protected server-side storage, not in the database, public files or browser storage. The key cannot be downloaded from this UI.</p>
+    <form id="google-key-form"><div class="field"><label for="google-key-file">JSON file (maximum 32 KiB)</label><input class="input" id="google-key-file" type="file" accept=".json,application/json" required></div><button class="btn btn-primary" type="submit">Upload / replace key</button></form>
+    <p class="small faint">Replacing a key pauses delivery and requires a fresh ownership check. Do not upload keys in chat or commit them to Git. File permissions protect local storage; use encrypted disks/backups on your server.</p>
+    <dl class="meta-list"><dt>Configured origin</dt><dd id="google-origin" class="mono"></dd><dt>Key status</dt><dd id="google-key-status"></dd><dt>Service account</dt><dd id="google-email" class="mono"></dd><dt>Project</dt><dd id="google-project"></dd><dt>Delivery</dt><dd id="google-enabled"></dd><dt>Local limits</dt><dd id="google-limits"></dd></dl>
+    <label style="display:block;margin:18px 0"><input type="checkbox" id="google-approval"> I have enabled the required APIs and obtained Google's required usage approval/quota. I will submit only genuine eligible vacancies.</label>
+    <div class="flex wrap"><button class="btn btn-primary" id="google-enable">Verify ownership & enable</button><button class="btn" id="google-pause">Pause</button><button class="btn" id="google-remove">Remove key</button></div>
+    <p id="google-note" class="small faint" role="status"></p>
+  </div></div>
+  <div class="card"><div class="card-head"><h3>Google setup checklist</h3></div><div class="card-body">
+    <ol><li>Set <code>PUBLIC_BASE_URL=https://v1.indexmetrix.com</code> (or your actual owned origin) on the server.</li><li>In Google Cloud, enable <strong>Indexing API</strong> and <strong>Search Console API</strong> in the service-account project.</li><li>Verify ownership of your site in Search Console, then add the JSON file's <code>client_email</code> as a <strong>delegated owner</strong>. Full-user access alone is insufficient for this integration.</li><li>Obtain the required <a href="https://developers.google.com/search/apis/indexing-api/v3/quota-pricing" target="_blank" rel="noopener">API approval/quota</a>. Google's initial testing quota is 200 publish requests per day per project; other tools sharing the project also consume it.</li><li>Upload the key, verify ownership and enable delivery here. Then <a href="/real-jobs">publish a real vacancy</a>.</li></ol>
+    <p><strong>Scopes:</strong> <code>indexing</code> for notifications; <code>webmasters.readonly</code> to verify ownership. Ownership is checked again before delivery.</p>
+    <p><strong>Automatic delivery:</strong> persistent deduplicated queue, bounded retries for temporary failures, and local rate limits. Demos, arbitrary PDFs and normal articles do not qualify.</p>
+    <p><strong>ACCEPTED ≠ INDEXED.</strong> This UI records notification delivery, not Google's crawl or index state. No private endpoint, CAPTCHA bypass or Search Console UI automation is used.</p>
+    <p><a href="https://developers.google.com/search/apis/indexing-api/v3/prereqs" target="_blank" rel="noopener">Official prerequisites</a> · <a href="https://developers.google.com/search/apis/indexing-api/v3/using-api" target="_blank" rel="noopener">API documentation</a></p>
+  </div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/google-indexing.js?v=1"></script>{% endblock %}

@@ -23,7 +23,9 @@ JOB_PROBE = "PROBE"              # technical server probe of the original URL
 JOB_OBSERVE = "OBSERVE"          # search visibility observation (non-authoritative)
 JOB_GSC_INSPECT = "GSC_INSPECT"  # Google Search Console URL inspection (own pages)
 
-JOB_TYPES = (JOB_PIPELINE, JOB_PROBE, JOB_OBSERVE, JOB_GSC_INSPECT)
+JOB_INDEX_NOTIFY = "GOOGLE_INDEX_NOTIFY"
+
+JOB_TYPES = (JOB_PIPELINE, JOB_PROBE, JOB_OBSERVE, JOB_GSC_INSPECT, JOB_INDEX_NOTIFY)
 
 # Job statuses
 JOB_PENDING = "PENDING"
@@ -44,6 +46,7 @@ class QueueManager:
         self.settings = settings
         # set by the application lifespan once shared services exist
         self.intake_lock = asyncio.Lock()
+        self.indexing_lock = asyncio.Lock()
         self.resource_locks: dict[int, asyncio.Lock] = {}
         self._timers: set = set()
         self.fetcher = None
@@ -85,9 +88,21 @@ class QueueManager:
         orphaned = [p["id"] for p in await self.repos.pdfs.all()
                     if p.get("status") == "RECEIVED" and p["id"] not in with_jobs]
         await self.enqueue_pipelines(orphaned)
+        from .indexing import reconcile
+        await reconcile(self)
+        self._workers.append(asyncio.create_task(self._indexing_maintenance(), name="indexing-maintenance"))
         for _ in range(self.concurrency):
             self._workers.append(asyncio.create_task(self._worker_loop(), name="queue-worker"))
         log.info("Queue started with %d workers", self.concurrency)
+
+    async def _indexing_maintenance(self):
+        from .indexing import reconcile
+        while not self._stop.is_set():
+            await asyncio.sleep(60)
+            try:
+                await reconcile(self)
+            except Exception:
+                log.error("Indexing maintenance failed; will retry without losing stored pages.")
 
     async def stop(self) -> None:
         self._stop.set()
@@ -174,6 +189,19 @@ class QueueManager:
 
     async def cancel(self, job_id: int) -> bool:
         job = await self.repos.jobs.get(job_id)
+        if job and job["job_type"] == JOB_INDEX_NOTIFY:
+            from .indexing import payload_for
+            from ..utils import json_loads
+            async with self.indexing_lock:
+                job = await self.repos.jobs.get(job_id)
+                if job["status"] not in (JOB_PENDING, JOB_RETRY_WAITING):
+                    return False
+                await self.repos.jobs.update(job_id, status=JOB_CANCELLED, completed_at=utcnow_iso())
+                payload = json_loads(job.get("payload"), {})
+                page = await self.repos.pages.get(payload.get("page_id", 0))
+                if page and payload == payload_for(self, page):
+                    await self.repos.pages.update(page["id"], touch=False, indexing_status="CANCELLED")
+                return True
         if not job or job["status"] not in (JOB_PENDING, JOB_RETRY_WAITING):
             return False
         await self.repos.jobs.update(job_id, status=JOB_CANCELLED, completed_at=utcnow_iso())

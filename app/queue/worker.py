@@ -74,6 +74,11 @@ async def process_job(manager: QueueManager, job_id: int) -> None:
     job = await repos.jobs.get(job_id)
     if not job or job["status"] in ("COMPLETED", "DONE", "CANCELLED", "FAILED", "RUNNING"):
         return
+    if job["job_type"] == "GOOGLE_INDEX_NOTIFY":
+        from .indexing import process_notification
+        await process_notification(manager, job_id)
+        return
+
     if job.get("attempts", 0) >= job.get("max_attempts", 1):
         await repos.jobs.update(job_id, status="FAILED", completed_at=utcnow_iso(), error="Attempt limit reached")
         return

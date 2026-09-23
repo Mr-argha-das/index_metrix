@@ -1,0 +1,15 @@
+<!doctype html><html lang="en" data-theme="dark"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ job.title }} · {{ job.company }} — {{ app_name }}</title>
+<meta name="description" content="{{ page.description }}"><meta name="robots" content="{{ 'index,follow' if active else 'noindex,follow' }}">
+<link rel="canonical" href="{{ canonical_url }}"><link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/dashboard.css"><link rel="stylesheet" href="/static/css/responsive.css">
+<meta property="og:title" content="{{ job.title }} · {{ job.company }}"><meta property="og:url" content="{{ canonical_url }}"><meta property="og:type" content="website">
+{% if active %}<script type="application/ld+json">{{ job_schema | tojson }}</script>{% endif %}
+</head><body class="pdf-page-shell"><main class="pdf-page-inner">
+<header class="pdf-page-hero"><a href="/references">← Published pages</a><p class="small">{{ app_name }} · Job #{{ page.job_number }}</p><h1>{{ job.title }}</h1><p>{{ job.company }} · {{ job.city }}, {{ job.region }}, {{ job.country }}</p>
+{% if active %}<a class="pdf-cta" href="{{ job.apply_url }}" rel="noopener" target="_blank">Apply with employer</a>{% else %}<p class="evidence-card"><strong>This vacancy is closed.</strong> Applications are no longer available from this page.</p>{% endif %}
+</header>
+<section class="card mb-16"><div class="card-head"><h2>Job details</h2></div><div class="card-body"><dl class="meta-list"><dt>Employer</dt><dd><a href="{{ job.company_url }}" rel="noopener" target="_blank">{{ job.company }}</a></dd><dt>Employment</dt><dd>{{ job.employment_type.replace('_', ' ') }}</dd><dt>Work location</dt><dd>{{ job.city }}, {{ job.region }}, {{ job.country }}</dd><dt>Originally posted</dt><dd><time datetime="{{ job.date_posted }}">{{ job.date_posted }}</time></dd><dt>Closing date</dt><dd><time datetime="{{ job.valid_through }}">{{ job.valid_through }}</time> (end of day UTC)</dd></dl><h2>Description and responsibilities</h2><p style="white-space:pre-line">{{ job.description }}</p><h2>Qualifications and experience</h2><p style="white-space:pre-line">{{ job.qualifications }}</p></div></section>
+<p class="small faint">Vacancy information supplied and confirmed by the publishing operator. Applications take place on the linked employer/recruiter site; {{ app_name }} does not collect applications or payments here.</p>
+<p class="small faint">Published <time datetime="{{ page.published_at }}">{{ page.published_at }}</time> · <a href="/rss.xml">RSS</a></p>
+</main></body></html>

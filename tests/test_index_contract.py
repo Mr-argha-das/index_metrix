@@ -369,7 +369,7 @@ async def test_unchanged_revalidation_preserves_slug_and_dates(tmp_path):
     third = await create_page_for_pdf(repos, settings, pdf, analysis)
     assert third["slug"] == first["slug"] and third["published_at"] == first["published_at"]
     assert third["title"] == first["title"]  # fictional title is not source metadata
-    assert analysis.title in third["description"]
+    assert third["description"] == first["description"]  # generated-profile copy is separate from source metadata
     assert third["demo_job"] == first["demo_job"]
 
 

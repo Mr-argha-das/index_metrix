@@ -10,9 +10,9 @@ HARD RULES implemented here:
   values are preserved as evidence. When the API is unavailable or silent,
   the status is UNKNOWN. Nothing is ever fabricated.
 
-The Google Indexing API is deliberately **not** implemented: it only supports
-JobPosting and BroadcastEvent embedded in VideoObject, and is never appropriate for arbitrary
-third-party PDFs.
+This client does not use the Indexing API for arbitrary PDF/HTML resources.
+The separate google_indexing module supports only operator-attested real
+vacancies, never generated demos or source URLs.
 
 Auth: service-account JWT (RS256) → OAuth2 token, plain HTTP over
 ``searchconsole.googleapis.com`` / ``www.googleapis.com`` (no vendor SDK).

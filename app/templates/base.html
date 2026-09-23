@@ -2,6 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
+  <meta name="robots" content="noindex,nofollow">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title or app_name }} — {{ app_name }}</title>
   <meta name="csrf-token" content="{{ csrf_token }}">
@@ -62,6 +63,8 @@
 
         {% if current_user and current_user.role == 'ADMIN' %}
         <div class="nav-label">Administration</div>
+        <a class="nav-item {{ 'active' if nav == 'real-jobs' else '' }}" href="/real-jobs">Real jobs</a>
+        <a class="nav-item {{ 'active' if nav == 'google-indexing' else '' }}" href="/google-indexing">Google Indexing API</a>
         <a class="nav-item {{ 'active' if nav == 'users' else '' }}" href="/users">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Users
@@ -126,7 +129,7 @@
   {% if bootstrap_session %}
   <script id="session-bootstrap" type="application/json">{{ bootstrap_session | tojson }}</script>
   {% endif %}
-  <script src="/static/js/app.js?v=web-urls-1"></script>
+  <script src="/static/js/app.js?v=real-jobs-1"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

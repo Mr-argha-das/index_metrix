@@ -113,7 +113,7 @@ class Repository:
             self.store.save(new_df, backup=False)
             return [jsonable(row) for row in rows]
 
-    async def update(self, row_id: int, **fields: Any) -> dict | None:
+    async def update(self, row_id: int, *, touch: bool = True, **fields: Any) -> dict | None:
         result: dict | None = None
 
         def _do(df: pd.DataFrame) -> dict | None:
@@ -125,7 +125,7 @@ class Repository:
             for col, val in fields.items():
                 if col in df.columns and col != "id":
                     df.loc[mask, col] = val
-            if "updated_at" in df.columns:
+            if "updated_at" in df.columns and touch:
                 df.loc[mask, "updated_at"] = utcnow_iso()
             self.store.save(df, backup=False)
             return jsonable(df.loc[mask].iloc[0].to_dict())

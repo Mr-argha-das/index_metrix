@@ -18,7 +18,7 @@ MAX_SLUG_LEN = 72
 
 
 def public_page_path(page: dict) -> str:
-    if page.get("page_kind") == "demo-job":
+    if page.get("page_kind") in ("demo-job", "real-job"):
         return f"/jobs/{int(page['job_number'])}"
     return f"/pdf/{page['slug']}"
 

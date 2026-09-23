@@ -3,6 +3,7 @@
 {% set subtitle = "Google Search Console & Bing Webmaster (optional)" %}
 {% set nav = "integrations" %}
 {% block content %}
+<p class="evidence-card mb-16"><a href="/google-indexing">Google Indexing API: upload service-account JSON and enable real-job notifications →</a></p>
 <div class="grid-2">
   <div class="card">
     <div class="card-head">
@@ -30,7 +31,7 @@
         <span class="ev-source">Not configured</span>
         Set <span class="mono">GOOGLE_SERVICE_ACCOUNT_JSON</span> (path to a service-account JSON with the
         <span class="mono">webmasters</span> scope) in <span class="mono">.env</span>, then “Test connection”.
-        The Google Indexing API is intentionally not implemented (blog/video content types only).
+        For eligible real job notifications, use the separate <a href="/google-indexing">Google Indexing API setup</a>. Normal PDF/HTML references are not eligible.
       </div>
       {% endif %}
     </div>

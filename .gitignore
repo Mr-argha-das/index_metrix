@@ -26,3 +26,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Service-account upload/provisioning secrets
+**/google-indexing.json
+**/service_account*.json

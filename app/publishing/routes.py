@@ -16,6 +16,8 @@ from .pages import build_pdf_page_context, public_page_path
 
 log = logging.getLogger("bot_indexer.publishing")
 
+from .real_jobs import discoverable
+
 router = APIRouter(tags=["publishing"])
 
 
@@ -39,6 +41,8 @@ async def pdf_dedicated_page(slug: str, request: Request):
     if not pages:
         raise HTTPException(status_code=404, detail="Page not found.")
     page = pages[0]
+    if page.get("page_kind") == "real-job":
+        return RedirectResponse(public_page_path(page), status_code=308)
     pdf = await repos.pdfs.get(page["pdf_id"])
     if not pdf:
         raise HTTPException(status_code=404, detail="Underlying PDF record not found.")
@@ -70,14 +74,17 @@ async def pdf_dedicated_page(slug: str, request: Request):
 
 
 @router.api_route("/jobs/{number}", include_in_schema=False, methods=["GET", "HEAD"])
-async def fictional_job_page(number: str, request: Request):
+async def job_dedicated_page(number: str, request: Request):
     if not number.isascii() or not number.isdigit() or len(number) > 18 or str(int(number)) != number:
         raise HTTPException(404, "Job page not found.")
     pages = await _repos(request).pages.find(
-        lambda p: p.get("page_kind") == "demo-job" and p.get("job_number") == int(number))
+        lambda p: p.get("page_kind") in ("demo-job", "real-job") and p.get("job_number") == int(number))
     if not pages:
-        raise HTTPException(404, "Demo job page not found.")
+        raise HTTPException(404, "Job page not found.")
     page = pages[0]
+    if page.get("page_kind") == "real-job":
+        from .real_job_routes import render_real_job
+        return render_real_job(request, page)
     pdf = await _repos(request).pdfs.get(page["pdf_id"])
     if not pdf:
         raise HTTPException(404, "Source record not found.")
@@ -90,7 +97,7 @@ async def fictional_job_page(number: str, request: Request):
 @router.api_route("/references", include_in_schema=False, methods=["GET", "HEAD"])
 async def reference_library(request: Request, page: int = Query(1, ge=1)):
     """Public, server-rendered discovery links, not an authenticated dashboard."""
-    rows = await _repos(request).pages.all(order="id")
+    rows = [p for p in await _repos(request).pages.all(order="id") if discoverable(p)]
     per_page = 50
     total_pages = max(1, (len(rows) + per_page - 1) // per_page)
     if page > total_pages:
@@ -114,7 +121,7 @@ async def sitemap(request: Request):
     if not await _effective_sitemap_enabled(request):
         raise HTTPException(status_code=404, detail="Sitemap is disabled.")
     repos = _repos(request)
-    pages = [p for p in await repos.pages.all(order="published_at") if p.get("sitemap_included")]
+    pages = [p for p in await repos.pages.all(order="published_at") if p.get("sitemap_included") and discoverable(p)]
     base = settings.public_base_url
     if len(pages) > sitemap_mod.SITEMAP_CHUNK_SIZE:
         # Sitemap index + first chunk
@@ -126,7 +133,7 @@ async def sitemap(request: Request):
 async def sitemap_chunk(chunk: int, request: Request):
     repos = _repos(request)
     settings = _settings(request)
-    pages = [p for p in await repos.pages.all(order="published_at") if p.get("sitemap_included")]
+    pages = [p for p in await repos.pages.all(order="published_at") if p.get("sitemap_included") and discoverable(p)]
     if not await _effective_sitemap_enabled(request) or chunk < 1 or chunk > max(1, (len(pages) + sitemap_mod.SITEMAP_CHUNK_SIZE - 1) // sitemap_mod.SITEMAP_CHUNK_SIZE):
         raise HTTPException(status_code=404, detail="Sitemap chunk not found.")
     start = (chunk - 1) * sitemap_mod.SITEMAP_CHUNK_SIZE
@@ -158,7 +165,7 @@ async def rss_feed(request: Request):
     if not await effective_setting(request.app.state.db, "rss_enabled"):
         raise HTTPException(status_code=404, detail="RSS is disabled.")
     repos = _repos(request)
-    pages = [p for p in await repos.pages.all(order="published_at") if p.get("rss_included")]
+    pages = [p for p in await repos.pages.all(order="published_at") if p.get("rss_included") and discoverable(p)]
     return Response(rss_mod.render_rss(pages, settings), media_type="application/rss+xml")
 
 
@@ -183,6 +190,8 @@ def render_robots(settings: Settings) -> str:
         "Disallow: /admin/\n"
         "Disallow: /data/\n"
         "Disallow: /login\n"
+        "Disallow: /real-jobs\n"
+        "Disallow: /google-indexing\n"
         f"\nSitemap: {base}/sitemap.xml\n"
     )
 
@@ -202,7 +211,7 @@ preview_pages = APIRouter(tags=["publishing-pages"])
 @preview_pages.get("/sitemap", include_in_schema=False)
 async def sitemap_page(request: Request, user: dict = Depends(require_user_page)):
     repos = _repos(request)
-    pages = [p for p in await repos.pages.all(order="-published_at") if p.get("sitemap_included")]
+    pages = [p for p in await repos.pages.all(order="-published_at") if p.get("sitemap_included") and discoverable(p)]
     return templates.render(
         request,
         "sitemap_page.html",
@@ -213,7 +222,7 @@ async def sitemap_page(request: Request, user: dict = Depends(require_user_page)
 @preview_pages.get("/rss", include_in_schema=False)
 async def rss_page(request: Request, user: dict = Depends(require_user_page)):
     repos = _repos(request)
-    pages = [p for p in await repos.pages.all(order="-published_at") if p.get("rss_included")]
+    pages = [p for p in await repos.pages.all(order="-published_at") if p.get("rss_included") and discoverable(p)]
     return templates.render(
         request,
         "rss_page.html",

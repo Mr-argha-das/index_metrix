@@ -1,8 +1,10 @@
+> **Real-job Indexing API addition (2026-09-23):** Admins can now publish actual reviewed vacancies from **Real jobs**, upload a protected service-account JSON under **Google Indexing API**, and enable automatic notifications for eligible owned job pages. Existing generated demos and PDF/HTML references remain excluded. **ACCEPTED ≠ INDEXED.** Setup, permissions, approval, security and limits: [GOOGLE_INDEXING.md](GOOGLE_INDEXING.md).
+
 > **Google capability decision (2026-09-21):** there is no generic public API to request indexing of arbitrary owned URLs. INDEX MATRIX uses normal discovery: public reference pages, the new `/references` HTML library, sitemap, RSS and robots. Direct request-indexing is explicitly `UNSUPPORTED`; no Google request is made by publication. See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current official sources, API/scopes/quotas distinctions, implementation and verification. Earlier implementation reports are historical.
 
 # INDEX MATRIX
 
-> **Current publication mode: fictional job demos.** New validated submissions create `/jobs/<number>` with saved, clearly labelled fictional details and a separate original-source link. Applications are disabled; no real vacancy, “official job PDF” or Google JobPosting eligibility is asserted. Existing `/pdf/<slug>` references remain unchanged. See [DEMO_JOBS.md](DEMO_JOBS.md) for behavior, compatibility and verification.
+> **Source-URL publication mode: generated job examples.** New validated PDF/HTML submissions create `/jobs/<number>` with saved, clearly labelled fictional details and a separate original-source link. These generated examples accept no applications and are not eligible real vacancies or official job documents. Real jobs use the separate admin-reviewed form, not this generator. Existing `/pdf/<slug>` references remain unchanged. See [DEMO_JOBS.md](DEMO_JOBS.md) for behavior, compatibility and verification.
 
 **FastAPI platform for third-party PDF and HTML resource validation, publishing, discovery and monitoring.**
 
@@ -21,7 +23,7 @@ You submit external PDF or normal webpage URLs (homepages, about pages, blogs an
 | **Discovery** | Public paginated `/references` HTML links; `sitemap.xml` (our pages only, real `lastmod`, never third-party URLs), `rss.xml` (real `pubDate`), `robots.txt` declaring the sitemap |
 | **Queue** | In-process async queue, concurrency ≤ 5, 3 retries with exponential backoff (5 s × 2ⁿ, capped 300 s), crash recovery on restart |
 | **Monitoring** | **Technical Server Probe** (explicitly labelled “NOT evidence of any Google crawl”), Search Console URL Inspection for *authorized properties only*; index status changes **only** with recorded authoritative evidence |
-| **Integrations** | Google Search Console (JWT RS256 service account, **no Indexing API** as a generic submission tool) and Bing Webmaster — both optional; when absent they report `NOT CONFIGURED`, they never fabricate results |
+| **Integrations** | Google Search Console (JWT RS256 service account, **no Indexing API** as a generic submission tool) and Bing Webmaster — both optional; eligible real jobs have a separate Indexing API integration; when absent they report `NOT CONFIGURED`, they never fabricate results |
 
 ### PDF and normal webpage URLs
 
@@ -116,7 +118,7 @@ When unconfigured, every integration surface reports **NOT CONFIGURED** — no f
 .venv/bin/python -m pytest tests/ -v
 ```
 
-The current full suite passes **294 Python tests** (2026-09-22), plus **10 frontend tests**. See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current verification and [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the historical implementation report.
+The current full suite passes **330 Python tests** (2026-09-23), plus **14 frontend tests**. See [GOOGLE_DISCOVERY.md](GOOGLE_DISCOVERY.md) for current verification and [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the historical implementation report.
 
 | File | Covers |
 |---|---|
@@ -124,6 +126,7 @@ The current full suite passes **294 Python tests** (2026-09-22), plus **10 front
 | `test_feather.py` | atomic writes, no temp leftovers, persistence across restart, backups/restore, corruption → clear error + file preserved, schema migration with data preserved |
 | `test_auth.py` | login/logout/me, bootstrap idempotency, login brute-force limiting, CSRF enforcement, role-based 403s, own-vs-others data isolation |
 | `test_users.py` | creation validation (email/password/role/duplicates), disable/enable, password reset invalidates sessions, self-protection, last-admin guard |
+| `test_google_indexing.py` | Real-job publication/schema, admin-only key upload, ownership and official request payloads, expiry, notification dedupe/recovery/retries/quota, no secrets or false index evidence |
 | `test_web_urls.py` | Homepage, PHP/blog/redirect URLs, HTML/XHTML/generic MIME, heading fallback, extensionless PDF, mixed batches and all intake methods, unsupported sources, publication and resource-aware UI |
 | `test_pipeline.py` | end-to-end publish + metadata, duplicate detection, same-content flagging, 404/403/fake-HTML/timeout paths, retry endpoint, delete removes page + sitemap entry, user ownership |
 | `test_publishing.py` | sitemap (own pages only, disabled → 404, deletion removes), RSS (`pubDate`, `guid`), robots, public page without auth, stable unique slugs |
@@ -250,7 +253,7 @@ The URLs table displays the persisted **Failure reason** and a **View diagnostic
 
 A document opening through a browser or an external reader does not prove that the application's server can retrieve it. Obtain the exact stored error before changing validation or network configuration. Never disable TLS verification, SSRF checks or robots enforcement to make a status appear successful. The former MSU external sample has been replaced by an explicitly non-working URL-format placeholder rather than advertising an unverified third-party file as a working test.
 
-Diagnostics regressions: `node --test tests/frontend_auth.test.js tests/frontend_diagnostics.test.js` (10 tests), plus `tests/test_failure_diagnostics.py` (HTTP 403/404, HTML-as-PDF, readable detail pages and escaped error text).
+Diagnostics regressions: `node --test tests/frontend*.test.js` (14 tests across auth, diagnostics and indexing UI), plus `tests/test_failure_diagnostics.py` (HTTP 403/404, HTML-as-PDF, readable detail pages and escaped error text).
 
 
 ### NAT64 / DNS64 networks (including some ChromeOS Linux setups)

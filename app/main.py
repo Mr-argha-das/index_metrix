@@ -263,7 +263,7 @@ class SecurityMiddleware:
                 headers.append((b"x-content-type-options", b"nosniff"))
                 if not any(k.lower() == b"referrer-policy" for k, _ in headers):
                     headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
-                if path.startswith("/api/auth/"):
+                if path.startswith(("/api/auth/", "/api/google-indexing", "/api/real-jobs")):
                     headers.append((b"cache-control", b"no-store"))
                 host_name = (raw_headers.get(b"host") or b"").decode("latin-1").split(":")[0]
                 if is_page and not host_name.endswith(".e2b.app"):
@@ -312,7 +312,7 @@ app.add_middleware(SecurityMiddleware)
 async def validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(
         status_code=400,
-        content={"detail": "Validation error", "errors": exc.errors()},
+        content={"detail": "Validation error", "errors": [{"loc": e["loc"], "msg": e["msg"], "type": e["type"]} for e in exc.errors()]},
     )
 
 
@@ -379,6 +379,10 @@ async def private_docs(user: dict = Depends(require_admin)):
     return get_swagger_ui_html(openapi_url="/api/openapi.json", title="INDEX MATRIX API")
 
 
+from .publishing.real_job_routes import router as real_job_router
+from .integrations.indexing_routes import router as indexing_router
+app.include_router(real_job_router)
+app.include_router(indexing_router)
 app.include_router(index_router)
 app.include_router(auth_router)
 app.include_router(auth_pages)
@@ -501,7 +505,7 @@ async def api_queue(request: Request, user: dict = Depends(require_user)):
         repos: Repos = request.app.state.repos
         pdfs = await repos.pdfs.all()
         mine = {p["id"] for p in pdfs if p.get("user_id") == user.get("id")}
-        jobs = [j for j in jobs if j.get("pdf_id") in mine or j.get("pdf_id") is None]
+        jobs = [j for j in jobs if j.get("pdf_id") in mine or (j.get("pdf_id") is None and j.get("job_type") != "GOOGLE_INDEX_NOTIFY")]
     return {"jobs": jobs}
 
 

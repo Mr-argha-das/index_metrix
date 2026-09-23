@@ -16,7 +16,7 @@
   <main class="pdf-page-inner">
     <header class="pdf-page-hero">
       <h1>Reference library</h1>
-      <p>Browse clearly labelled fictional job demos and source references. Demo jobs are not real vacancies. Submitted resources remain hosted by their original publishers.</p>
+      <p>Browse real vacancies, generated job examples and source references. Generated examples are not real vacancies. Submitted resources remain hosted by their original publishers.</p>
       <nav><a href="/rss.xml">RSS feed</a> · <a href="/sitemap.xml">Sitemap</a> · <a href="/login">Operator sign in</a></nav>
     </header>
     {% for item in pages %}
@@ -31,7 +31,7 @@
       <span>Page {{ number }} of {{ total_pages }}</span>
       {% if number < total_pages %}<a rel="next" href="/references?page={{ number + 1 }}">Next references</a>{% endif %}
     </nav>
-    <p class="small faint">Discovery links do not guarantee crawling or indexing. No automated request-indexing operation is performed.</p>
+    <p class="small faint">Discovery links do not guarantee crawling or indexing. Only separately reviewed real vacancies qualify for automated Indexing API notifications.</p>
   </main>
 </body>
 </html>

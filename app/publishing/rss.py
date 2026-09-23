@@ -58,7 +58,7 @@ def render_rss(pages: list[dict], settings, limit: int | None = None) -> str:
         f"    <title>{escape(settings.app_name)} — Published reference pages</title>\n"
         f"    <link>{escape(base)}</link>\n"
         f"    <atom:link href=\"{escape(base + '/rss.xml')}\" rel=\"self\" type=\"application/rss+xml\"/>\n"
-        f"    <description>Clearly labelled fictional job demos and source reference pages, published on {escape(settings.app_name)}.</description>\n"
+        f"    <description>Real vacancies, generated job examples and source reference pages, published on {escape(settings.app_name)}.</description>\n"
         f"    <language>en</language>\n"
         f"{build_tag}"
         + "\n".join(items)

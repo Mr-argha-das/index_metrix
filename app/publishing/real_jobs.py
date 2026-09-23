@@ -86,8 +86,4 @@ def schema_for(page, url):
     except (ValueError, KeyError, TypeError):
         schema.pop("validThrough", None)
 
-    # The employer/source URL is exposed as a normal link on the page. It is
-    # not presented as the canonical URL of our job page.
-    if details_url:
-        schema["sameAs"] = details_url
     return schema

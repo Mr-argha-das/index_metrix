@@ -39,8 +39,10 @@ def http_url(value):
 
 
 def schema_for(page, url):
-    """JobPosting structured data mirrors the visible operator-provided facts."""
+    """Return JobPosting only when the operator supplied verified job facts."""
     job = job_data(page)
+    if job.get("structured_data_verified") is not True or job.get("source_only") is True:
+        return None
     details_url = http_url(job.get("job_details") or job.get("apply_url"))
     description = (
         "<p>" + escape(str(job.get("description") or "")).replace("\n", "<br>") + "</p>"

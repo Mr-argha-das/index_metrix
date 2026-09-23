@@ -12,7 +12,7 @@
   <meta property="og:url" content="{{ canonical_url }}">
   <meta property="og:type" content="article">
   <meta name="twitter:card" content="summary">
-  {% if active %}
+  {% if active and job_schema %}
   <script type="application/ld+json">{{ job_schema | tojson }}</script>
   <script type="application/ld+json">{{ {
     "@context": "https://schema.org",
@@ -51,7 +51,7 @@
 
   <main class="wrap">
     <article class="hero">
-      {% if active %}<span class="eyebrow"><span class="dot"></span> Open vacancy</span>{% else %}<span class="eyebrow" style="background:rgba(251,191,36,.1);color:#f7d77f"><span class="dot" style="background:var(--amber)"></span> Closed vacancy</span>{% endif %}
+      {% if active and not job.source_only %}<span class="eyebrow"><span class="dot"></span> Open vacancy</span>{% elif active %}<span class="eyebrow"><span class="dot"></span> Source listing</span>{% else %}<span class="eyebrow" style="background:rgba(251,191,36,.1);color:#f7d77f"><span class="dot" style="background:var(--amber)"></span> Closed vacancy</span>{% endif %}
       <h1>{{ job.title }}</h1>
       <div class="company">
         {% if company_url %}<a href="{{ company_url }}" target="_blank" rel="noopener">{{ job.company }}</a>{% else %}{{ job.company }}{% endif %}

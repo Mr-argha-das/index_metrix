@@ -182,6 +182,12 @@ async def projection(page, settings, repos, notification_job=None):
         latest = jobs[-1] if jobs else {}
     else:
         latest = notification_job
+    gsc_jobs = await repos.jobs.find(
+        lambda j: j.get("job_type") == "GSC_INSPECT"
+        and (json_loads(j.get("payload"), {}) or {}).get("page_id") == page["id"]
+        and j.get("status") in {"PENDING", "RUNNING", "RETRY_WAITING"}
+    )
+    gsc_job = gsc_jobs[-1] if gsc_jobs else {}
     gsc_evidence = json_loads(page.get("gsc_inspection"), {}) or {}
     result = json_loads(page.get("indexing_result"), {}) or {}
     job = job_data(page)
@@ -211,6 +217,9 @@ async def projection(page, settings, repos, notification_job=None):
             "indexStatus": page.get("gsc_index_status") or "UNKNOWN",
             "crawlStatus": page.get("gsc_crawl_status") or "UNKNOWN",
             "lastCheckedAt": page.get("gsc_last_checked_at"),
+            "nextCheckAt": gsc_job.get("next_attempt_at"),
+            "pollSequence": (json_loads(gsc_job.get("payload"), {}) or {}).get("poll_sequence"),
+            "polling": bool(gsc_job),
             "evidence": gsc_evidence,
         },
         "indexStatus": page.get("gsc_index_status") or "UNKNOWN",
@@ -244,7 +253,7 @@ async def dashboard_real_jobs(request: Request, user=Depends(require_admin)):
         "queued": sum(1 for p in items if p["notificationStatus"] == "QUEUED"),
         "sent": sum(1 for p in items if p["notificationStatus"] == "ACCEPTED"),
         "failed": sum(1 for p in items if p["notificationStatus"] == "FAILED"),
-        "waiting": sum(1 for p in items if p["notificationStatus"] in {"NOT_CONFIGURED", "PAUSED", "WAITING_QUOTA", "RETRY_WAITING"}),
+        "waiting": sum(1 for p in items if p["notificationStatus"] in {"QUEUED", "NOT_CONFIGURED", "PAUSED", "WAITING_QUOTA", "RETRY_WAITING"}),
         "indexed": sum(1 for p in items if p["indexStatus"] == "INDEXED"),
         "notIndexed": sum(1 for p in items if p["indexStatus"] == "NOT_INDEXED"),
         "unknown": sum(1 for p in items if p["indexStatus"] == "UNKNOWN"),

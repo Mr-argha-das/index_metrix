@@ -488,9 +488,6 @@ async def run_pipeline(manager: QueueManager, job: dict) -> None:
         status="PENDING",
     )
 
-    from ..publishing.discovery import record_discovery_fallback
-    await record_discovery_fallback(repos, pdf_id)
-
     # schedule the initial technical probe (honest label, not a "Google crawl")
     await manager.enqueue(JOB_PROBE, pdf_id=pdf_id, payload={"kind": "initial"})
 

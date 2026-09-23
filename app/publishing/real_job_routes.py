@@ -4,12 +4,10 @@ from __future__ import annotations
 import io
 import math
 import re
-import random
 from datetime import date, timedelta
 from urllib.parse import urlsplit
 
 import pandas as pd
-from faker import Faker
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from .. import templates

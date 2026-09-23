@@ -13,7 +13,7 @@ from ..integrations.google_indexing import GoogleIndexingClient, IndexingError, 
 from ..publishing.pages import public_page_url
 from ..publishing.real_jobs import is_open, job_data
 from ..utils import json_dumps, json_loads, parse_iso, utcnow, utcnow_iso
-from .manager import JOB_INDEX_NOTIFY, backoff_seconds
+from .manager import JOB_GSC_INSPECT, JOB_INDEX_NOTIFY, backoff_seconds
 
 ENABLED_KEY = "internal_google_indexing_enabled"
 QUOTA_KEY = "internal_google_indexing_attempts"

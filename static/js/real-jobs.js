@@ -48,7 +48,6 @@
         <td><div class="flex wrap">
           ${p.status === "OPEN" ? `<button class="btn btn-sm" data-action="edit" data-id="${p.id}">Edit</button><button class="btn btn-sm" data-action="close" data-id="${p.id}">Close</button>` : ""}
           <button class="btn btn-sm" data-action="inspect" data-id="${p.id}">Inspect GSC</button>
-          ${["FAILED","CANCELLED"].includes(p.notificationStatus) ? `<button class="btn btn-sm" data-action="retry" data-id="${p.id}">Retry</button>` : ""}
         </div></td>
       </tr>`;
     }).join("");
@@ -83,7 +82,7 @@
         method: editId ? "PUT" : "POST",
         body
       });
-      App.toast(result.duplicate ? "Already published" : "Vacancy saved", "Google status: " + result.notificationStatus, "success");
+      App.toast(result.duplicate ? "Already published" : "Vacancy saved", "Google status: " + result.notificationStatus + ". Transient failures retry automatically.", "success");
       reset();
       await load();
     } catch (err) {

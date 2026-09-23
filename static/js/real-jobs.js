@@ -30,7 +30,7 @@
         ? `<a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener">${esc(new URL(p.sourceUrl).hostname)}</a>`
         : "—";
       const queue = p.queue && p.queue.status
-        ? `${pillText(p.queue.status)}<div class="small faint">${esc((p.queue.attempts || 0) + "/" + (p.queue.maxAttempts || 0))}</div>`
+        ? `${pillText(p.queue.status)}<div class="small faint">${p.queue.maxAttempts == null ? esc((p.queue.attempts || 0) + " attempts · auto retry") : esc((p.queue.attempts || 0) + "/" + (p.queue.maxAttempts || 0))}</div>`
         : "—";
       const gsc = p.gsc || {};
       const gscEvidence = gsc.evidence || {};

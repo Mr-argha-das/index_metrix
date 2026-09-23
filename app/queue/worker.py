@@ -623,9 +623,79 @@ async def run_observe(manager: QueueManager, job: dict) -> None:
 
 
 async def run_gsc_inspect(manager: QueueManager, job: dict) -> None:
-    from ..monitoring.status import apply_gsc_evidence
+    from ..monitoring.status import apply_gsc_evidence, classify_gsc_index_state, crawl_status_from_gsc
 
     repos = manager.repos
+    from ..utils import json_loads
+
+    payload = json_loads(job.get("payload"), {}) or {}
+    page_id = payload.get("page_id")
+
+    # Real jobs are inspected directly on the public /jobs/<number> page.
+    if page_id:
+        page = await repos.pages.get(int(page_id))
+        if not page or page.get("page_kind") != "real-job":
+            raise PipelineFinal("Real job page no longer exists.", ST_FAILED)
+        if manager.gsc is None:
+            await repos.pages.update(
+                page["id"],
+                gsc_index_status="UNKNOWN",
+                gsc_crawl_status="UNKNOWN",
+                gsc_last_checked_at=utcnow_iso(),
+                gsc_inspection=json_dumps({"source": "Google Search Console", "error": "NOT_CONFIGURED"}),
+            )
+            await repos.events.add(
+                "REAL_JOB_GSC_NOT_CONFIGURED",
+                "Google Search Console is not configured; real-job index status remains UNKNOWN.",
+                user_id=page.get("reviewed_by"),
+                status="WARN",
+                metadata={"pageId": page["id"], "url": page.get("page_url")},
+            )
+            return
+
+        result = await manager.gsc.inspect_own_page(page["page_url"])
+        if result.get("error"):
+            await repos.pages.update(
+                page["id"],
+                gsc_index_status="UNKNOWN",
+                gsc_crawl_status="UNKNOWN",
+                gsc_last_checked_at=utcnow_iso(),
+                gsc_inspection=json_dumps({"source": "Google Search Console", "error": result["error"], "checked_at": utcnow_iso()}),
+            )
+            await repos.events.add(
+                "REAL_JOB_GSC_INSPECT_ERROR",
+                f"Search Console inspection failed; index status remains UNKNOWN: {result['error']}",
+                user_id=page.get("reviewed_by"),
+                status="ERROR",
+                evidence_type="SEARCH_CONSOLE",
+                metadata={"pageId": page["id"], "url": page.get("page_url"), "error": result["error"]},
+            )
+            return
+
+        status, evidence = classify_gsc_index_state(result)
+        crawl = crawl_status_from_gsc(evidence)
+        evidence["target"] = "real-job"
+        evidence["page_id"] = page["id"]
+        evidence["url"] = page["page_url"]
+
+        await repos.pages.update(
+            page["id"],
+            gsc_index_status=status,
+            gsc_crawl_status=crawl,
+            gsc_last_checked_at=evidence["checked_at"],
+            gsc_inspection=json_dumps(evidence),
+        )
+        await repos.events.add(
+            "REAL_JOB_GSC_INSPECTED",
+            f"Google Search Console: index={status}, crawl={crawl}, coverage={evidence.get('coverage_state') or 'n/a'}",
+            user_id=page.get("reviewed_by"),
+            status="SUCCESS",
+            evidence_type="SEARCH_CONSOLE",
+            metadata=evidence,
+        )
+        return
+
+    # Existing reference-page inspection flow.
     pdf_id = job["pdf_id"]
     pdf = await repos.pdfs.get(pdf_id)
     if not pdf:
@@ -633,8 +703,7 @@ async def run_gsc_inspect(manager: QueueManager, job: dict) -> None:
     if manager.gsc is None:
         await repos.events.add(
             "GSC_NOT_CONFIGURED",
-            "Google Search Console is not configured (no service account). "
-            "Index status stays UNKNOWN.",
+            "Google Search Console is not configured (no service account). Index status stays UNKNOWN.",
             pdf_id=pdf_id,
             status="WARN",
         )

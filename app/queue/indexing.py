@@ -11,7 +11,7 @@ import httpx
 
 from ..integrations.google_indexing import GoogleIndexingClient, IndexingError, load_credentials, credential_path
 from ..publishing.pages import public_page_url
-from ..publishing.real_jobs import RealJobIn, is_open, job_data
+from ..publishing.real_jobs import is_open, job_data
 from ..utils import json_dumps, json_loads, parse_iso, utcnow, utcnow_iso
 from .manager import JOB_INDEX_NOTIFY, backoff_seconds
 
@@ -111,8 +111,6 @@ async def process_notification(manager, job_id):
                 raise IndexingError("Attempt limit reached; check the last result and retry manually if appropriate.")
             if not page.get("reviewed_by") or job_data(page).get("authorized_real_vacancy") is not True:
                 raise IndexingError("Vacancy has not been attested by an authorized operator.")
-            if payload["type"] == "URL_UPDATED":
-                RealJobIn.model_validate(job_data(page))
             if not credential_path(manager.settings).exists():
                 await defer(manager, job, page, "NOT_CONFIGURED", 300)
                 return
@@ -145,5 +143,9 @@ async def process_notification(manager, job_id):
         # recoverable, not relabel an accepted request as a Google rejection.
         await repos.pages.update(page["id"], touch=False, indexing_status="ACCEPTED", indexing_result=json_dumps(result))
         await repos.jobs.update(job_id, status="DONE", completed_at=utcnow_iso(), error=None)
+        if payload["type"] == "URL_UPDATED":
+            # Queue a separate evidence-only Search Console inspection. This
+            # never changes ACCEPTED into INDEXED unless GSC supplies evidence.
+            await manager.enqueue("GSC_INSPECT", payload={"page_id": page["id"]}, max_attempts=2)
         manager._stats["completed"] += 1
         await repos.events.add("GOOGLE_NOTIFICATION_ACCEPTED", "Indexing notification accepted; index status remains UNKNOWN.", user_id=page["reviewed_by"], metadata={"pageId": page["id"], "type": payload["type"]})

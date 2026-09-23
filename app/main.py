@@ -102,8 +102,6 @@ async def lifespan(app: FastAPI):
     # -- bootstrap + housekeeping --------------------------------------------
     await bootstrap_admin_if_needed(repos, settings)
     await rebase_page_urls(repos, settings.public_base_url)
-    from .database.migrations import repair_status_semantics
-    await repair_status_semantics(repos)
     await auth.purge_expired()
     await queue.start()
 
@@ -122,7 +120,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="INDEX MATRIX",
     version=__version__,
-    description="PDF URL validation, publishing, discovery & monitoring platform.",
+    description="Vacancy publishing and Google indexing platform.",
     lifespan=lifespan,
     docs_url=None,
     openapi_url=None,

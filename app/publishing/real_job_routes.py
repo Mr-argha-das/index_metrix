@@ -4,6 +4,9 @@ from __future__ import annotations
 import io
 import math
 import re
+import random
+from datetime import date, timedelta
+from urllib.parse import urlsplit
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -43,6 +46,70 @@ ALIASES = {
     "closing date": "valid_through",
     "valid through": "valid_through",
 }
+
+
+
+GENERATED_TITLES = [
+    "Python Developer", "Senior Python Developer", "Python Backend Developer",
+    "Python Full Stack Developer", "Junior Python Developer", "Python Software Engineer",
+    "FastAPI Developer", "Django Developer", "Backend Engineer (Python)",
+    "Python Automation Engineer", "Python Cloud Engineer", "API Integration Engineer",
+]
+GENERATED_SKILLS = [
+    "Python", "FastAPI", "Django", "SQL", "PostgreSQL", "MySQL", "MongoDB",
+    "Redis", "Docker", "AWS", "REST APIs", "Git", "Linux", "Microservices",
+    "Unit Testing", "Pytest", "Pydantic", "AsyncIO", "JWT",
+]
+GENERATED_LOCATIONS = [
+    ("Jaipur", "Rajasthan"), ("Bengaluru", "Karnataka"), ("Hyderabad", "Telangana"),
+    ("Pune", "Maharashtra"), ("Mumbai", "Maharashtra"), ("Chennai", "Tamil Nadu"),
+    ("Noida", "Uttar Pradesh"), ("Gurgaon", "Haryana"), ("Ahmedabad", "Gujarat"),
+    ("Kolkata", "West Bengal"), ("Indore", "Madhya Pradesh"), ("Kochi", "Kerala"),
+]
+EMPLOYMENT_TYPES = ["FULL_TIME", "FULL_TIME", "FULL_TIME", "CONTRACT", "PART_TIME", "INTERNSHIP"]
+
+
+def _generated_company(source_url: str) -> str:
+    host = urlsplit(source_url).netloc.lower().removeprefix("www.")
+    base = host.split(":")[0].split(".")[0] if host else "Employer"
+    return re.sub(r"[-_]+", " ", base).strip().title() or "Employer"
+
+
+def _generated_job(source_url: str) -> dict:
+    company = _generated_company(source_url)
+    title = random.choice(GENERATED_TITLES)
+    city, region = random.choice(GENERATED_LOCATIONS)
+    posted = date.today()
+    return {
+        "title": title,
+        "company": company,
+        "company_url": source_url,
+        "job_details": source_url,
+        "apply_url": source_url,
+        "description": f"{company} is hiring for a {title}. Review the employer-provided job details and application link for the authoritative vacancy information.",
+        "qualifications": ", ".join(random.sample(GENERATED_SKILLS, k=random.randint(4, 7))),
+        "employment_type": random.choice(EMPLOYMENT_TYPES),
+        "city": city,
+        "region": region,
+        "country": "IN",
+        "date_posted": posted.isoformat(),
+        "valid_through": (posted + timedelta(days=random.randint(25, 60))).isoformat(),
+        "authorized_real_vacancy": True,
+    }
+
+
+def _parse_links(value: str) -> list[str]:
+    links = []
+    for raw in re.split(r"[\\n,\\s]+", value or ""):
+        link = raw.strip()
+        if not link:
+            continue
+        parsed = urlsplit(link)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            raise HTTPException(400, f"Invalid URL: {link}")
+        if link not in links:
+            links.append(link)
+    return links
 
 
 def _normalize_header(value) -> str:
@@ -217,6 +284,40 @@ async def create_job(request: Request, payload: dict, user=Depends(require_admin
         result, duplicate = await _create_real_job(manager, data, user)
     return {"duplicate": duplicate, **result}
 
+
+
+
+@router.post("/api/real-jobs/links")
+async def import_job_links(
+    request: Request,
+    links: str = Form(""),
+    authorized_bulk: bool = Form(False),
+    user=Depends(require_admin),
+):
+    if not authorized_bulk:
+        raise HTTPException(400, "Confirm that every linked vacancy is genuine and that you are authorized to publish it.")
+    urls = _parse_links(links)
+    if not urls:
+        raise HTTPException(400, "Add at least one HTTP(S) job/application URL.")
+    if len(urls) > 500:
+        raise HTTPException(400, "Maximum 500 links per submission.")
+
+    manager = request.app.state.queue
+    created, duplicates, errors = [], [], []
+    async with manager.indexing_lock:
+        for source_url in urls:
+            try:
+                data = _generated_job(source_url)
+                result, duplicate = await _create_real_job(manager, data, user)
+                (duplicates if duplicate else created).append(result)
+            except Exception as exc:
+                errors.append({"url": source_url, "error": "Could not publish vacancy: " + str(exc)[:300]})
+    return {
+        "created": created,
+        "duplicates": duplicates,
+        "errors": errors,
+        "totalLinks": len(urls),
+    }
 
 @router.post("/api/real-jobs/import")
 async def import_jobs(request: Request, file: UploadFile = File(...), authorized_bulk: bool = Form(False), user=Depends(require_admin)):

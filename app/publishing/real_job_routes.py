@@ -9,8 +9,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from .. import templates
-from ..auth.routes import require_admin, require_admin_page
-from ..integrations.google_indexing import IndexingError
+from ..auth.routes import require_admin
 from ..queue.indexing import ensure_notification
 from ..utils import json_dumps, json_loads, utcnow_iso
 from .pages import public_page_path, public_page_url

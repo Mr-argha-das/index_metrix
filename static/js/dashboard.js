@@ -226,23 +226,64 @@
       const data = await api("/api/real-jobs/dashboard");
       const counts = data.counts || {};
       for (const [id, key] of [
-        ["dash-rj-total", "total"], ["dash-rj-sent", "sent"],
-        ["dash-rj-indexed", "indexed"], ["dash-rj-unknown", "unknown"]
+        ["dash-rj-total", "total"], ["dash-rj-open", "open"],
+        ["dash-rj-sent", "sent"], ["dash-rj-queued", "queued"],
+        ["dash-rj-indexed", "indexed"], ["dash-rj-crawled", "crawled"],
+        ["dash-rj-notindexed", "notIndexed"], ["dash-rj-unknown", "unknown"]
       ]) {
         const el = document.getElementById(id);
         if (el) el.textContent = counts[key] ?? 0;
       }
-      host.innerHTML = (data.items || []).slice(0, 8).map(p => {
+
+      const items = data.items || [];
+      host.innerHTML = items.map((p) => {
         const g = p.gsc || {};
+        const q = p.queue || {};
+        const j = p.job || {};
+        const loc = [j.city, j.region, j.country].filter(Boolean).join(", ") || "—";
+        const details = [
+          ["Title", j.title], ["Description", j.description], ["Qualifications", j.qualifications],
+          ["Employment type", j.employment_type], ["City", j.city], ["Region", j.region],
+          ["Country", j.country], ["Date posted", j.date_posted], ["Valid through", j.valid_through],
+          ["Company URL", j.company_url], ["Job details", p.sourceUrl || j.job_details],
+          ["Apply URL", j.apply_url], ["Public URL", p.publicUrl],
+          ["Published", p.publishedAt], ["Updated", p.updatedAt],
+          ["Status", p.status], ["Google notification", p.notificationStatus],
+          ["Queue job", q.id], ["Attempts", q.attempts], ["Next retry", q.nextAttemptAt],
+          ["Queue error", q.error], ["GSC last checked", g.lastCheckedAt]
+        ].filter(([,v]) => v !== undefined && v !== null && String(v).trim() !== "")
+         .map(([k,v]) => '<div class="small"><span class="faint">' + esc(k) + ':</span> ' + esc(String(v)) + '</div>')
+         .join("");
+
         return `<tr>
-          <td><a href="${esc(p.path)}" target="_blank" rel="noopener">${esc(p.job.title || "Untitled")}</a><div class="small faint">${esc(p.job.company || "")} · #${esc(p.number)}</div></td>
+          <td>
+            <a href="${esc(p.path)}" target="_blank" rel="noopener">#${esc(p.number)} · ${esc(j.title || "Untitled")}</a>
+            <div class="small faint">${esc(p.status)}</div>
+          </td>
+          <td>${esc(j.company || "—")}</td>
+          <td>${esc(loc)}</td>
+          <td>${p.sourceUrl ? '<a href="' + esc(p.sourceUrl) + '" target="_blank" rel="noopener">Source ↗</a>' : "—"}</td>
+          <td>${j.apply_url ? '<a href="' + esc(j.apply_url) + '" target="_blank" rel="noopener">Apply ↗</a>' : "—"}</td>
+          <td class="small">${esc(p.publishedAt || "—")}</td>
           <td>${pill(p.notificationStatus)}</td>
           <td>${pill(g.crawlStatus || "UNKNOWN")}</td>
           <td>${pill(g.indexStatus || "UNKNOWN")}</td>
+          <td class="small">
+            ${pill(q.status || "—")}
+            <div class="faint">${q.attempts || 0} attempt(s)</div>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="10" style="padding-top:0">
+            <details>
+              <summary class="small" style="cursor:pointer">View all vacancy data · #${esc(p.number)}</summary>
+              <div class="evidence-card mt-8" style="display:grid;gap:5px">${details || '<span class="small faint">No additional vacancy data.</span>'}</div>
+            </details>
+          </td>
         </tr>`;
-      }).join("") || '<tr><td colspan="4" class="small faint">No real vacancies yet.</td></tr>';
+      }).join("") || '<tr><td colspan="10" class="small faint">No published vacancies yet.</td></tr>';
     } catch (e) {
-      host.innerHTML = `<tr><td colspan="4" class="small recent-failure">${esc(e.message)}</td></tr>`;
+      host.innerHTML = `<tr><td colspan="10" class="small recent-failure">${esc(e.message)}</td></tr>`;
     }
   }
 

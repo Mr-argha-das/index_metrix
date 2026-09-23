@@ -138,7 +138,7 @@ def _generated_job(source_url: str) -> dict:
 
 def _parse_links(value: str) -> list[str]:
     links = []
-    for raw in re.split(r"[\\n,\\s]+", value or ""):
+    for raw in re.split(r"[\n,\s]+", value or ""):
         link = raw.strip()
         if not link:
             continue

@@ -7,7 +7,7 @@ from ..integrations.google_indexing import IndexingError
 from ..queue.indexing import ensure_notification
 from ..utils import json_dumps, json_loads, utcnow_iso
 from .pages import public_page_path, public_page_url
-from .real_jobs import RealJobIn, is_open, job_data, schema_for
+from .real_jobs import is_open, job_data, schema_for
 
 router = APIRouter()
 
@@ -40,9 +40,9 @@ async def list_jobs(request: Request, user=Depends(require_admin)):
 
 
 @router.post('/api/real-jobs', status_code=201)
-async def create_job(request: Request, payload: RealJobIn, user=Depends(require_admin)):
+async def create_job(request: Request, payload: dict, user=Depends(require_admin)):
     manager = request.app.state.queue
-    data = payload.model_dump(mode='json')
+    data = payload
     serialized = json_dumps(data)
     async with manager.indexing_lock:
         duplicates = await manager.repos.pages.find(lambda p: p.get('page_kind') == 'real-job' and p.get('real_job') == serialized)
@@ -51,7 +51,7 @@ async def create_job(request: Request, payload: RealJobIn, user=Depends(require_
         number = await manager.repos.settings.reserve_counter('internal_next_demo_job')
         now = utcnow_iso()
         page = await manager.repos.pages.insert(page_kind='real-job', job_number=number, slug=f'real-job-{number}',
-            title=payload.title, description=payload.description[:300], real_job=serialized, job_status='OPEN',
+            title=data.get('title', ''), description=data.get('description', '')[:300], real_job=serialized, job_status='OPEN',
             reviewed_by=user['id'], reviewed_at=now, indexing_revision=1, indexing_status='QUEUED',
             page_url=manager.settings.public_base_url + f'/jobs/{number}', published_at=now, updated_at=now,
             sitemap_included=manager.settings.sitemap_enabled, rss_included=manager.settings.rss_enabled)
@@ -61,17 +61,17 @@ async def create_job(request: Request, payload: RealJobIn, user=Depends(require_
 
 
 @router.put('/api/real-jobs/{page_id}')
-async def update_job(page_id: int, request: Request, payload: RealJobIn, user=Depends(require_admin)):
+async def update_job(page_id: int, request: Request, payload: dict, user=Depends(require_admin)):
     manager = request.app.state.queue
     async with manager.indexing_lock:
         page = await require_real_page(request, page_id)
         if not is_open(page):
             raise HTTPException(409, 'Closed vacancies cannot be silently reopened. Publish a separately reviewed new opening.')
-        data = payload.model_dump(mode='json')
-        if data['date_posted'] != job_data(page)['date_posted']:
+        data = payload
+        if data.get('date_posted') != job_data(page).get('date_posted'):
             raise HTTPException(400, 'The original posting date is immutable; do not manufacture freshness.')
         if data != job_data(page):
-            page = await manager.repos.pages.update(page_id, real_job=json_dumps(data), title=payload.title, description=payload.description[:300],
+            page = await manager.repos.pages.update(page_id, real_job=json_dumps(data), title=data.get('title', ''), description=data.get('description', '')[:300],
                 reviewed_by=user['id'], reviewed_at=utcnow_iso(), updated_at=utcnow_iso(), indexing_revision=page['indexing_revision'] + 1)
             await ensure_notification(manager, page)
     return projection(await manager.repos.pages.get(page_id), manager.settings)

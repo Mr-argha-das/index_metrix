@@ -11,7 +11,7 @@
       counts.total || 0,
       counts.open || 0,
       counts.sent || 0,
-      counts.queued || 0,
+      counts.waiting || 0,
       counts.crawled || 0,
       counts.indexed || 0,
       counts.notIndexed || 0,

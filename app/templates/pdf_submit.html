@@ -3,9 +3,39 @@
 {% set subtitle = "Validate source URLs and publish clearly labelled fictional job demos" %}
 {% set nav = "submit" %}
 {% block content %}
-<p class="evidence-card mb-16">This URL intake does not create an eligible real vacancy. To publish actual job details and queue a Google notification, an admin must use <a href="/real-jobs">Real jobs</a>.</p>
+<p class="evidence-card mb-16">Use <strong>Add URLs</strong> for source resources. For genuine vacancies, admins can publish your own public <strong>/jobs/&lt;number&gt;</strong> pages from a vacancy sheet below; each published job page gets its own Google notification and evidence-based indexing status.</p>
 <div class="card mb-16"><div class="card-body"><strong>New publication format: /jobs/&lt;number&gt;</strong>
 <p>After a source passes validation, the app generates and saves a <strong>fictional job demo</strong> with a normal link to that source. Demo details are not extracted job facts, and applications are disabled. Existing published reference pages remain unchanged.</p></div></div>
+{% if user and user.role == "ADMIN" %}
+<div class="card mb-16">
+  <div class="card-head">
+    <div>
+      <h3>Publish genuine job vacancies from sheet</h3>
+      <div class="sub">Creates your own public /jobs/&lt;number&gt; pages. Employer/source links remain visible and crawlable from your page.</div>
+    </div>
+    <a class="btn btn-sm" href="/real-jobs">Open full job manager</a>
+  </div>
+  <div class="card-body">
+    <div class="evidence-card mb-16">
+      <strong>Sheet columns</strong>
+      <div class="small mt-8">title, company, company_url, job_details, apply_url, description, qualifications, employment_type, city, region, country, date_posted, valid_through</div>
+      <div class="small faint mt-8"><strong>job_details</strong> can be an employer PDF, job page, form, application page, blog/resource URL, or another public source URL. It is placed in a normal followable HTML <span class="mono">&lt;a href&gt;</span> on your public job page.</div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>CSV / XLSX vacancy sheet</label>
+        <input class="input" id="job-sheet-file" type="file" accept=".csv,.xlsx">
+      </div>
+      <div class="field" style="justify-content:flex-end">
+        <label class="small"><input type="checkbox" id="job-sheet-attestation"> I confirm every vacancy is genuine and authorized for publication.</label>
+        <button class="btn btn-primary" id="job-sheet-import" type="button">Publish vacancies & queue Google</button>
+      </div>
+    </div>
+    <div id="job-sheet-result" class="mt-8"></div>
+    <div class="small faint mt-8">Transient Google/network/inspection failures are retried automatically with backoff. Google accepting a notification is not the same as indexing; the dashboard only reports indexed when Search Console provides evidence.</div>
+  </div>
+</div>
+{% endif %}
 <div class="dash-grid">
   <div class="col">
     <div class="card">
@@ -62,6 +92,43 @@ https://your-public-site.example/documents/source.pdf</div>
 </div>
 {% endblock %}
 {% block scripts %}
+{% if user and user.role == "ADMIN" %}
+<script>
+(function () {
+  const btn = document.getElementById("job-sheet-import");
+  if (!btn) return;
+  const out = document.getElementById("job-sheet-result");
+  btn.addEventListener("click", async () => {
+    const file = document.getElementById("job-sheet-file").files[0];
+    const confirmed = document.getElementById("job-sheet-attestation").checked;
+    if (!file) return App.toast("Select a vacancy sheet", "Choose CSV or XLSX.", "error");
+    if (!confirmed) return App.toast("Authorization required", "Confirm that every vacancy is genuine and authorized.", "error");
+    btn.disabled = true;
+    out.innerHTML = '<span class="small faint">Publishing vacancies and queueing Google notifications…</span>';
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("authorized_bulk", "true");
+      const result = await App.api("/api/real-jobs/import", {method: "POST", body: fd});
+      out.innerHTML =
+        '<div class="pill green mb-8"><span class="dot"></span>' + result.created.length + ' published</div>' +
+        '<div class="pill slate mb-8"><span class="dot"></span>' + result.duplicates.length + ' duplicates</div>' +
+        '<div class="pill ' + (result.errors.length ? 'red' : 'green') + ' mb-8"><span class="dot"></span>' + result.errors.length + ' errors</div>' +
+        (result.errors.length ? '<ul class="small" style="color:var(--muted);margin:8px 0 0 18px">' + result.errors.map(e => '<li>Row ' + App.esc(e.row ?? "—") + ': ' + App.esc(e.error) + '</li>').join("") + '</ul>' : '') +
+        '<div class="small mt-8"><a href="/real-jobs">View all job pages and indexing status →</a></div>';
+      document.getElementById("job-sheet-file").value = "";
+      document.getElementById("job-sheet-attestation").checked = false;
+      App.toast("Vacancies published", result.created.length + " public job pages queued for Google.", result.errors.length ? "warn" : "success");
+    } catch (e) {
+      out.innerHTML = '<div class="login-error" style="display:block">' + App.esc(e.message) + '</div>';
+      App.toast("Import failed", e.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+{% endif %}
 <script>
 (function () {
   const btn = document.getElementById("submit-btn");

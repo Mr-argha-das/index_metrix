@@ -95,13 +95,15 @@
 
   document.getElementById("import-real-jobs").addEventListener("click", async () => {
     const input = document.getElementById("real-job-sheet");
-    if (!input.files.length) return App.toast("Select a sheet", "Choose CSV, XLSX or XLS first.", "error");
+    if (!input.files.length) return App.toast("Select a sheet", "Choose a CSV or XLSX file first.", "error");
+    if (!document.getElementById("bulk-attestation").checked) return App.toast("Authorization required", "Confirm that every vacancy in the sheet is genuine and authorized.", "error");
     const button = document.getElementById("import-real-jobs");
     button.disabled = true;
     importResult.textContent = "Importing vacancies and queueing Google notifications…";
     try {
       const fd = new FormData();
       fd.append("file", input.files[0]);
+      fd.append("authorized_bulk", "true");
       const result = await App.api("/api/real-jobs/import", {method: "POST", body: fd});
       importResult.textContent = `Rows: ${result.totalRows}. Created: ${result.created.length}. Duplicates: ${result.duplicates.length}. Errors: ${result.errors.length}.`;
       if (result.errors.length) console.warn("Real-job import errors", result.errors);

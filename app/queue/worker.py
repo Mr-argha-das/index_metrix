@@ -666,6 +666,12 @@ async def run_gsc_inspect(manager: QueueManager, job: dict) -> None:
 
         result = await manager.gsc.inspect_own_page(page["page_url"])
         if result.get("error"):
+            error_text = str(result.get("error"))
+            # Temporary Search Console/API/network failures should use the
+            # queue's automatic retry path. Authorization/configuration errors
+            # are recorded as UNKNOWN and are not hammered indefinitely.
+            if any(token in error_text.upper() for token in ("HTTP 408", "HTTP 429", "HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504", "TIMEOUT", "TIMED OUT")):
+                raise PipelineRetryable(error_text)
             await repos.pages.update(
                 page["id"],
                 gsc_index_status="UNKNOWN",

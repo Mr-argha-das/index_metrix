@@ -80,7 +80,7 @@ async def _create_real_job(manager, data: dict, user: dict):
         lambda p: p.get("page_kind") == "real-job" and p.get("real_job") == serialized
     )
     if duplicates:
-        return projection(duplicates[0], manager.settings, manager.repos), True
+        return await projection(duplicates[0], manager.settings, manager.repos), True
 
     number = await manager.repos.settings.reserve_counter("internal_next_demo_job")
     now = utcnow_iso()
@@ -119,7 +119,7 @@ async def _create_real_job(manager, data: dict, user: dict):
             "sourceUrl": data.get("job_details") or data.get("apply_url"),
         },
     )
-    return projection(page, manager.settings, manager.repos), False
+    return await projection(page, manager.settings, manager.repos), False
 
 
 async def projection(page, settings, repos):

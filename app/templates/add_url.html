@@ -23,11 +23,11 @@
         <div class="card-body">
           <h3>Automatic job creation</h3>
           <div class="small" style="line-height:1.9">
-            Every link is written to both <code>job_details</code> and <code>apply_url</code>.
-            The remaining fields are generated using the vacancy generator logic you supplied.
+            Every link is written exactly to both <code>job_details</code> and <code>apply_url</code>.
+            URL-only intake creates an honest source-link landing page and does not invent employer facts.
           </div>
           <div class="small faint mt-8">
-            The generated title/company/location/description are synthetic placeholders. Verify them against the employer source before treating a vacancy as a genuine public listing.
+            URL-only pages do not emit <code>JobPosting</code> structured data. Use the reviewed vacancy/import flow with actual employer-provided details when you want verified JobPosting markup.
           </div>
         </div>
       </div>

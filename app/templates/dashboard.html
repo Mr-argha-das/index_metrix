@@ -81,17 +81,24 @@
       <div class="card-body">
         <div class="queue-mini" id="real-job-dashboard-kpis">
           <div class="qm"><div class="qm-num" id="dash-rj-total">0</div><div class="qm-lbl">Total</div></div>
+          <div class="qm"><div class="qm-num" id="dash-rj-open">0</div><div class="qm-lbl">Open</div></div>
           <div class="qm"><div class="qm-num" id="dash-rj-sent">0</div><div class="qm-lbl">Google accepted</div></div>
+          <div class="qm"><div class="qm-num" id="dash-rj-queued">0</div><div class="qm-lbl">Auto retry / queued</div></div>
           <div class="qm"><div class="qm-num" id="dash-rj-indexed">0</div><div class="qm-lbl">Indexed</div></div>
+          <div class="qm"><div class="qm-num" id="dash-rj-crawled">0</div><div class="qm-lbl">Crawled</div></div>
+          <div class="qm"><div class="qm-num" id="dash-rj-notindexed">0</div><div class="qm-lbl">Not indexed</div></div>
           <div class="qm"><div class="qm-num" id="dash-rj-unknown">0</div><div class="qm-lbl">Unknown</div></div>
         </div>
         <div class="table-wrap mt-16">
           <table class="data">
-            <thead><tr><th>Job</th><th>Request</th><th>Crawl</th><th>Index</th></tr></thead>
-            <tbody id="real-job-dashboard-rows"><tr><td colspan="4" class="small faint">Loading…</td></tr></tbody>
+            <thead><tr>
+              <th># / Job</th><th>Company</th><th>Location</th><th>Job details</th><th>Apply</th>
+              <th>Published</th><th>Google request</th><th>Crawl</th><th>Index</th><th>Queue</th>
+            </tr></thead>
+            <tbody id="real-job-dashboard-rows"><tr><td colspan="10" class="small faint">Loading…</td></tr></tbody>
           </table>
         </div>
-        <p class="small faint mt-16">Accepted means Google accepted the notification. It does not mean the page is indexed. Index/Crawl values require Search Console evidence.</p>
+        <div class="small faint mt-16">Showing up to 25 latest published vacancies. The table includes the source/job-details URL, application URL, publication time, Google notification state, queue/retry state, crawl evidence and index evidence. Google acceptance is not indexing evidence.</div>
       </div>
     </div>
     {% endif %}

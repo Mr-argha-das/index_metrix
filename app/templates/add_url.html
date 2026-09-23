@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set title = "Add URL" %}
-{% set subtitle = "Upload vacancy sheet and publish internal job pages" %}
+{% set subtitle = "Add one or multiple vacancy links" %}
 {% set nav = "submit" %}
 
 {% block content %}
@@ -61,15 +61,6 @@
   </div>
 </div>
 {% endblock %}
-
-<div class="card mt-16" style="max-width:980px">
-  <div class="card-body small">
-    <strong>What happens after publishing?</strong>
-    <p>One link = one internal public job page. The same employer URL is stored as <code>job_details</code> and <code>apply_url</code> and shown as a normal outbound link.</p>
-    <p>The internal <code>/jobs/&lt;number&gt;</code> URL enters the Google indexing queue. Temporary Google failures are retried automatically.</p>
-    <p style="margin-bottom:0">Google accepting a notification is not proof that the page is indexed. Dashboard status separates notification, queue, crawl and index evidence.</p>
-  </div>
-</div>
 
 {% block scripts %}
 <script>
